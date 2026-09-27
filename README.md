@@ -36,8 +36,9 @@ cargo run -p audio-cli -- trim recording.wav \
 
 - `crates/audio-core`: チャンク単位の特徴抽出、候補判定、フェードと共通ゲイン。
 - `crates/audio-cli`: WAVファイルの解析と書き出し。
-- `crates/audio-wasm`: 同じ解析コアを呼ぶWASM API。
+- `crates/audio-wasm`: Worker上で解析・ピーク測定・ゲイン適用を行うWASM API。
+- `web`: Cloudflare Workers、Hono、R2を使ったアップロード・解析・書き出し画面。
 
-WASM APIは `WasmAnalyzer::new(channels)`、interleaved f32サンプルの `push()`、JSON文字列を返す `finish()` で構成します。HTTP Workerとアップロード画面は未実装です。
+ブラウザは48 kHz float32 WAVを分割してWorkerへ送り、WorkerがR2から30秒区間を読み、Rust/WASMで解析します。画面で境界を調整後、Workerがステレオ共通ゲインを適用してWAVを書き出します。Cloudflare環境の準備とデプロイは後工程です。
 
 設計の詳細は [`docs/spec.md`](docs/spec.md) を参照してください。

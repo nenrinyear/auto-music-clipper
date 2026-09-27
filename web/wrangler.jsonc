@@ -16,6 +16,11 @@
 		"binding": "ASSETS",
 		"run_worker_first": ["/api/*"]
 	},
+	"r2_buckets": [
+		{ "binding": "AUDIO_BUCKET", "bucket_name": "yoin-audio-tmp" }
+	],
+	"triggers": { "crons": ["0 * * * *"] },
+	"limits": { "cpu_ms": 300000 },
 	"observability": {
 		"enabled": true
 	},

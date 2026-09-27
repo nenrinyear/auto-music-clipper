@@ -9,7 +9,8 @@
     "start": "wrangler dev",
     "build:wasm": "sh ./build-wasm.sh",
     "test": "vitest",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "predev": "npm run build:wasm"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.0.0",
@@ -17,5 +18,8 @@
     "typescript": "^5.5.2",
     "vitest": "~4.1.0",
     "wrangler": "^4.141.0"
+  },
+  "dependencies": {
+    "hono": "^4.13.9"
   }
 }

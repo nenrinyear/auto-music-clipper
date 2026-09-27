@@ -1,7 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const drop = $('drop'), fileInput = $('file'), workspace = $('workspace');
-let sourceFile, wav, objectUrl, analysis, envelope = [], exportBusy = false;
-const RATE = 48000, CHUNK_FRAMES = 32768, PEAK_BINS = 1400;
+let sourceFile, wav, objectUrl, analysis, envelope = [], exportBusy = false, jobId;
+const RATE = 48000, PEAK_BINS = 1400, UPLOAD_BYTES = 8 * 1024 * 1024;
 
 drop.addEventListener('click', () => fileInput.click());
 drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
@@ -10,6 +10,7 @@ drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
 drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag'); if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
 fileInput.addEventListener('change', () => { const selected=fileInput.files[0];fileInput.value='';if(selected)loadFile(selected); });
 $('replace').addEventListener('click', () => fileInput.click());
+$('begin-analysis').addEventListener('click', startAnalysis);
 $('start').addEventListener('input', updateRange);
 $('end').addEventListener('input', updateRange);
 $('wave').addEventListener('pointerdown', moveBoundary);
@@ -23,10 +24,11 @@ $('export').addEventListener('click', exportWav);
 async function loadFile(file) {
   clearError();
   if(objectUrl){URL.revokeObjectURL(objectUrl);objectUrl=undefined;}
+  sourceFile=undefined;wav=undefined;jobId=undefined;workspace.hidden=true;$('empty-note').hidden=false;
   if (!file.name.toLowerCase().endsWith('.wav')) return showError('WAV ファイルを選択してください。');
   sourceFile = file; $('filename').textContent = file.name;
-  workspace.hidden = false; $('empty-note').hidden = true; $('editor').hidden = true; $('progress').hidden = false;
-  $('progress-text').textContent = 'WAV形式を確認しています…'; $('export').disabled = true;
+  workspace.hidden = false; $('empty-note').hidden = true; $('editor').hidden = true; $('progress').hidden = true; $('preflight').hidden = true;
+  $('export').disabled = true;
   try {
     wav = await parseWav(file);
     if (wav.sampleRate !== RATE || wav.bits !== 32 || wav.format !== 3 || ![1, 2].includes(wav.channels)) {
@@ -35,34 +37,40 @@ async function loadFile(file) {
     const secs = wav.frames / RATE;
     $('fileinfo').textContent = `${wav.channels === 2 ? 'Stereo' : 'Mono'} · 48 kHz · 32-bit float · ${clock(secs)} · ${formatBytes(file.size)}`;
     $('duration-label').textContent = clock(secs);
-    $('progress-text').textContent = 'Rust / WASM で演奏区間を解析しています…';
-    const wasm = await import('/wasm/audio_wasm.js');
-    await wasm.default('/wasm/audio_wasm_bg.wasm');
-    const analyzer = new wasm.WasmAnalyzer(wav.channels);
-    envelope = new Array(PEAK_BINS).fill(0);
-    const framesPerBin = Math.max(1, Math.ceil(wav.frames / PEAK_BINS));
-    for (let offset = 0; offset < wav.frames; offset += CHUNK_FRAMES) {
-      const count = Math.min(CHUNK_FRAMES, wav.frames - offset);
-      const samples = await readSamples(file, wav, offset, count);
-      analyzer.push(samples);
-      for (let i = 0; i < samples.length; i++) {
-        const frame = offset + Math.floor(i / wav.channels);
-        const bin = Math.min(PEAK_BINS - 1, Math.floor(frame / framesPerBin));
-        const value = Math.abs(samples[i]); if (value > envelope[bin]) envelope[bin] = value;
-      }
-      if (offset % (CHUNK_FRAMES * 10) === 0) {
-        $('progress-text').textContent = `演奏区間を解析しています… ${Math.min(99, Math.floor(offset / wav.frames * 100))}%`;
-        await new Promise(resolve => setTimeout(resolve, 0));
-      }
-    }
-    analysis = JSON.parse(analyzer.finish());
-    const begin = analysis.start_frame == null ? 0 : analysis.start_frame / RATE;
-    const finish = analysis.end_frame == null ? secs : analysis.end_frame / RATE;
-    $('start').value = begin.toFixed(2); $('end').value = finish.toFixed(2);
-    $('status').textContent = analysis.status === 'ready' ? '自動検出 · 確認してください' : '要確認 · 手動調整してください';
-    $('editor').hidden = false; $('progress').hidden = true; drawWave(); updateRange();
     objectUrl = URL.createObjectURL(file);
-  } catch (err) { $('progress').hidden = true; showError(err.message || String(err)); }
+    $('preflight').hidden = false;
+    $('begin-analysis').disabled = false;
+  } catch (err) { showError(err.message || String(err)); }
+}
+
+async function startAnalysis(){
+  if(!sourceFile||!wav)return;
+  $('preflight').hidden=true;$('progress').hidden=false;$('progress-text').textContent='Cloudflareへ録音を送信しています…';$('begin-analysis').disabled=true;clearError();
+  try{
+    const created=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileBytes:sourceFile.size,dataOffset:wav.offset,dataBytes:wav.size,frames:wav.frames,channels:wav.channels,fileName:sourceFile.name})});
+    jobId=created.jobId;const parts=Math.ceil(sourceFile.size/UPLOAD_BYTES);
+    envelope=[];
+    for(let part=0;part<parts;part++){
+      const from=part*UPLOAD_BYTES,to=Math.min(sourceFile.size,from+UPLOAD_BYTES),blob=sourceFile.slice(from,to);
+      const response=await fetch(`/api/jobs/${jobId}/input/${part}`,{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:blob});
+      if(!response.ok)throw Error(await responseError(response));
+      $('progress-text').textContent=`録音を送信しています… ${Math.floor((part+1)/parts*100)}%`;
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+    const started=await api(`/api/jobs/${jobId}/analyze`,{method:'POST'});
+    for(let segment=0;segment<started.segments;segment++){
+      await api(`/api/jobs/${jobId}/analyze/segment/${segment}`,{method:'POST'});
+      $('progress-text').textContent=`Workers上でRust/WASM解析中… ${Math.floor((segment+1)/started.segments*90)}%`;
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+    await api(`/api/jobs/${jobId}/analyze/finish`,{method:'POST'});
+    const report=await api(`/api/jobs/${jobId}/report`);analysis=report;
+    if(Array.isArray(report.waveform))envelope=report.waveform;
+    $('start').value=(report.start_frame==null?0:report.start_frame/RATE).toFixed(2);
+    $('end').value=(report.end_frame==null?wav.frames/RATE:report.end_frame/RATE).toFixed(2);
+    $('status').textContent=report.status==='ready'?'自動検出 · 確認してください':'要確認 · 手動調整してください';
+    $('editor').hidden=false;$('progress').hidden=true;drawWave();updateRange();
+  }catch(err){$('progress').hidden=true;$('preflight').hidden=false;$('begin-analysis').disabled=false;showError(err.message||String(err));}
 }
 
 async function parseWav(file) {
@@ -80,15 +88,8 @@ async function parseWav(file) {
     p=start+size+(size&1);
   }
   if (!fmt || !data) throw Error('WAV の fmt/data チャンクが見つかりません。');
-  if (fmt.blockAlign !== fmt.channels * 4 || data.offset + data.size > file.size) throw Error('WAV のチャンク情報が不正です。');
+  if (fmt.blockAlign !== fmt.channels * 4 || data.offset + data.size > file.size || data.size % fmt.blockAlign !== 0) throw Error('WAV のチャンク情報が不正です。');
   return {...fmt, ...data, frames:Math.floor(data.size / fmt.blockAlign)};
-}
-
-async function readSamples(file, info, offset, frames) {
-  const bytes=await file.slice(info.offset+offset*info.blockAlign, info.offset+(offset+frames)*info.blockAlign).arrayBuffer();
-  const view=new DataView(bytes), out=new Float32Array(frames*info.channels);
-  for(let i=0;i<out.length;i++) out[i]=view.getFloat32(i*4,true);
-  return out;
 }
 
 function drawWave() {
@@ -128,26 +129,30 @@ function preview(seconds){
   if(!objectUrl)return;const player=new Audio(objectUrl);player.addEventListener('loadedmetadata',()=>{player.currentTime=seconds;player.play().catch(()=>showError('このブラウザでは WAV を試聴できません。'));},{once:true});
 }
 async function exportWav(){
-  if(exportBusy||!wav)return;const start=Number($('start').value),end=Number($('end').value);
+  if(exportBusy||!wav||!jobId)return;const start=Number($('start').value),end=Number($('end').value);
   const first=Math.round(start*RATE),last=Math.round(end*RATE),frames=last-first;
   if(first<0||last>wav.frames||frames<1)return showError('開始・終了位置を確認してください。');
-  // Blob assembly holds output parts in memory; keep the browser export bounded.
-  const outputBytes=44+frames*wav.channels*4;
-  if(outputBytes>512*1024*1024)return showError('ブラウザでの書き出しは 512 MiB までです。長時間録音は Rust CLI 版をご利用ください。');
-  exportBusy=true;$('export').disabled=true;$('export').textContent='書き出しています…';clearError();
+  exportBusy=true;$('export').disabled=true;$('export').textContent='Workersで書き出し中…';$('progress').hidden=false;$('progress-text').textContent='WorkersでWAVを書き出しています…';clearError();
   try{
-    let peak=0;
-    if($('normalize').checked){for(let o=first;o<last;o+=CHUNK_FRAMES){const a=await readSamples(sourceFile,wav,o,Math.min(CHUNK_FRAMES,last-o));for(const x of a)peak=Math.max(peak,Math.abs(x));}}
-    const target=Number($('target').value),gain=$('normalize').checked&&peak>0?target/peak:1;
-    if(gain>1e6||!Number.isFinite(gain))throw Error('音量を正規化できません。');
-    const parts=[makeHeader(frames,wav.channels)];
-    for(let o=first;o<last;o+=CHUNK_FRAMES){const a=await readSamples(sourceFile,wav,o,Math.min(CHUNK_FRAMES,last-o));if(gain!==1){for(let i=0;i<a.length;i++)a[i]=Math.max(-1,Math.min(1,a[i]*gain));}parts.push(a.buffer);}
-    const blob=new Blob(parts,{type:'audio/wav'}),url=URL.createObjectURL(blob),link=document.createElement('a');
-    link.href=url;link.download=sourceFile.name.replace(/\.wav$/i,'')+'_clip.wav';link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
+    const started=await api(`/api/jobs/${jobId}/render`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({startFrame:first,endFrame:last,targetDb:Number($('target').value),normalize:$('normalize').checked})});
+    if($('normalize').checked)for(let segment=0;segment<started.segments;segment++){
+      await api(`/api/jobs/${jobId}/render/measure/${segment}`,{method:'POST'});
+      $('progress-text').textContent=`Workers上でピーク測定中… ${Math.floor((segment+1)/started.segments*45)}%`;
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+    const prepared=await api(`/api/jobs/${jobId}/render/prepare`,{method:'POST'});
+    for(let segment=0;segment<prepared.segments;segment++){
+      await api(`/api/jobs/${jobId}/render/segment/${segment}`,{method:'POST'});
+      $('progress-text').textContent=`Workers上でWAVを書き出し中… ${50+Math.floor((segment+1)/prepared.segments*50)}%`;
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }
+    await api(`/api/jobs/${jobId}/render/finish`,{method:'POST'});
+    const link=document.createElement('a');link.href=`/api/jobs/${jobId}/download`;link.click();
   }catch(err){showError(err.message||String(err));}
-  finally{exportBusy=false;$('export').disabled=false;$('export').innerHTML='WAVを書き出す <span>↓</span>';}
+  finally{exportBusy=false;$('progress').hidden=true;$('export').disabled=false;$('export').innerHTML='WAVを書き出す <span>↓</span>';}
 }
-function makeHeader(frames,channels){const buffer=new ArrayBuffer(44),v=new DataView(buffer),bytes=frames*channels*4;const tag=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));tag(0,'RIFF');v.setUint32(4,36+bytes,true);tag(8,'WAVE');tag(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,3,true);v.setUint16(22,channels,true);v.setUint32(24,RATE,true);v.setUint32(28,RATE*channels*4,true);v.setUint16(32,channels*4,true);v.setUint16(34,32,true);tag(36,'data');v.setUint32(40,bytes,true);return buffer;}
+async function api(url,options={}){const response=await fetch(url,options);if(!response.ok)throw Error(await responseError(response));return response.json();}
+async function responseError(response){try{const body=await response.json();return body.error||`Request failed (${response.status})`;}catch{return `Request failed (${response.status})`;}}
 function clock(s){if(!Number.isFinite(s))return '0:00';const m=Math.floor(s/60),ss=Math.floor(s%60);return `${m}:${String(ss).padStart(2,'0')}`;}
 function formatBytes(n){return n<1024*1024?`${(n/1024).toFixed(0)} KB`:`${(n/1024/1024).toFixed(1)} MB`;}
 function showError(message){const el=$('error');el.textContent=message;el.hidden=false;}

@@ -269,6 +269,67 @@ impl Analyzer {
     }
 }
 
+/// Extracts only the feature frames whose windows start in `[keep_start, keep_end)`.
+/// `samples` may include a preceding window and look-ahead audio so callers can
+/// process large files in independent, overlapping chunks without changing the
+/// feature timeline at chunk boundaries.
+pub fn analyze_feature_chunk(
+    samples: &[f32],
+    channels: usize,
+    source_start: u64,
+    keep_start: u64,
+    keep_end: u64,
+) -> Result<Vec<FeatureFrame>, AudioError> {
+    if !(1..=2).contains(&channels) || !samples.len().is_multiple_of(channels) {
+        return Err(AudioError::InvalidBounds);
+    }
+    let hop = HOP as u64;
+    let source_frames = (samples.len() / channels) as u64;
+    let source_end = source_start.saturating_add(source_frames);
+    if source_start % hop != 0
+        || keep_start < source_start
+        || keep_start >= keep_end
+        || keep_end > source_end
+    {
+        return Err(AudioError::InvalidBounds);
+    }
+    let mut analyzer = Analyzer::new(channels, AnalysisConfig::default())?;
+    analyzer.push(samples)?;
+    let report = analyzer.finish()?;
+    Ok(report
+        .features
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, mut feature)| {
+            let window_start = source_start.saturating_add((index * HOP) as u64);
+            if window_start >= keep_start && window_start < keep_end {
+                feature.center_frame = source_start.saturating_add(feature.center_frame);
+                Some(feature)
+            } else {
+                None
+            }
+        })
+        .collect())
+}
+
+/// Builds the whole-recording decision after independently extracted feature
+/// chunks have been reassembled in timeline order.
+pub fn build_analysis_report(
+    channels: usize,
+    total_frames: u64,
+    features: Vec<FeatureFrame>,
+) -> Result<AnalysisReport, AudioError> {
+    if !(1..=2).contains(&channels) {
+        return Err(AudioError::InvalidChannels);
+    }
+    Ok(build_report(
+        channels,
+        total_frames,
+        AnalysisConfig::default(),
+        features,
+    ))
+}
+
 fn build_report(
     channels: usize,
     total: u64,
@@ -726,6 +787,48 @@ mod tests {
         let measured = measure_peak(&[0.0; 8], 1, &plan).unwrap();
         assert_eq!(measured.gain, 1.0);
         assert_eq!(measured.output_peak, 0.0);
+    }
+
+    #[test]
+    fn overlapped_feature_chunks_match_the_uninterrupted_feature_timeline() {
+        let channels = 2;
+        let frames = SAMPLE_RATE as usize * 4;
+        let mut samples = vec![0.0; frames * channels];
+        for frame in 24_000..168_000 {
+            let sample = (2.0 * PI * 440.0 * frame as f64 / SAMPLE_RATE as f64).sin() as f32 * 0.2;
+            samples[frame * channels] = sample;
+            samples[frame * channels + 1] = sample * 0.7;
+        }
+
+        let mut whole = Analyzer::new(channels, AnalysisConfig::default()).unwrap();
+        whole.push(&samples).unwrap();
+        let whole_report = whole.finish().unwrap();
+
+        let span = SAMPLE_RATE as u64;
+        let mut chunked = Vec::new();
+        for keep_start in (0..frames as u64).step_by(span as usize) {
+            let keep_end = (keep_start + span).min(frames as u64);
+            let source_start = keep_start.saturating_sub(HOP as u64);
+            let source_end = (keep_end + WINDOW as u64 + HOP as u64).min(frames as u64);
+            let from = source_start as usize * channels;
+            let to = source_end as usize * channels;
+            chunked.extend(
+                analyze_feature_chunk(
+                    &samples[from..to],
+                    channels,
+                    source_start,
+                    keep_start,
+                    keep_end,
+                )
+                .unwrap(),
+            );
+        }
+
+        assert_eq!(chunked, whole_report.features);
+        let chunked_report = build_analysis_report(channels, frames as u64, chunked).unwrap();
+        assert_eq!(chunked_report.start_frame, whole_report.start_frame);
+        assert_eq!(chunked_report.end_frame, whole_report.end_frame);
+        assert_eq!(chunked_report.final_applause_start.map(|c| c.frame), whole_report.final_applause_start.map(|c| c.frame));
     }
 
     #[test]
