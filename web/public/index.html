@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#111714" />
+  <title>余韻 — 演奏録音クリッパー</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="/"><span class="brand-mark">余</span><span>余韻<span class="brand-sub"> / YO-IN</span></span></a><span class="privacy"><i></i> 音声はこの端末内で処理されます</span></header>
+  <main>
+    <section class="intro"><div class="eyebrow">RECORDING EDITOR <span>01 / 01</span></div><h1>演奏のはじまりと、<br/><em>余韻の終わりを。</em></h1><p>録音を読み込むと、演奏の開始と終わりを自動で見つけます。<br class="desktop"/>境界を確認したら、左右のバランスを保って音量を整えましょう。</p></section>
+    <section id="drop" class="dropzone" tabindex="0" role="button" aria-label="WAVファイルを選択"><div class="upload-icon">↑</div><div><strong>録音ファイルをドロップ</strong><span>または <u>ファイルを選択</u></span></div><small>48 kHz · 32-bit float · mono / stereo WAV</small><input id="file" type="file" accept=".wav,audio/wav" hidden /></section>
+    <div id="error" class="error" hidden></div>
+    <section id="workspace" hidden>
+      <div class="file-row"><div class="file-icon">WAV</div><div class="file-meta"><strong id="filename"></strong><span id="fileinfo"></span></div><button id="replace" class="text-button">ファイルを変更</button></div>
+      <div id="progress" class="progress" hidden><span class="spinner"></span><span id="progress-text">WASMを準備しています…</span></div>
+      <div id="editor" hidden>
+        <div class="section-head"><div><div class="eyebrow">TRIM PREVIEW</div><h2>クリップ範囲</h2></div><span id="status" class="status"></span></div>
+        <div class="wave-card"><div class="wave-labels"><span>0:00</span><span id="duration-label"></span></div><canvas id="wave" width="1200" height="180" aria-label="録音の波形"></canvas><div class="range-inputs"><label>開始 <input id="start" type="number" min="0" step="0.01" /></label><label>終了 <input id="end" type="number" min="0" step="0.01" /></label><span id="selection-length"></span></div></div>
+        <div class="controls"><button id="listen-start" class="secondary">▶ 冒頭を試聴</button><button id="listen-end" class="secondary">▶ 終わりを試聴</button><label class="gain-control">音量を均等に <input id="normalize" type="checkbox" checked /><span class="switch"></span></label></div>
+        <div class="gain-row"><div><strong>ステレオバランスを維持</strong><span>左右に同じゲインを適用します</span></div><label class="gain-label">ピーク上限 <select id="target"><option value="0.891251">−1 dBFS</option><option value="0.944061">−0.5 dBFS</option><option value="1">0 dBFS</option></select></label></div>
+        <div class="export-row"><div><span class="export-title">仕上がり</span><span id="export-info">境界を確認してください</span></div><button id="export" class="primary" disabled>WAVを書き出す <span>↓</span></button></div>
+      </div>
+    </section>
+    <section id="empty-note" class="note"><span>i</span><p>解析結果は目安です。残響や拍手の入り方に合わせて、開始・終了を調整してから書き出してください。</p></section>
+  </main>
+  <footer><span>余韻 — 演奏録音を、気持ちよく。</span><a href="/api/health" target="_blank">Worker status ↗</a></footer>
+  <script type="module" src="/app.js"></script>
+</body></html>
