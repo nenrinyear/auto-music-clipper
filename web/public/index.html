@@ -10,14 +10,14 @@
   <link rel="stylesheet" href="/worker-flow.css" />
 </head>
 <body>
-  <header class="topbar"><a class="brand" href="/"><span class="brand-mark">余</span><span>余韻<span class="brand-sub"> / YO-IN</span></span></a><span class="privacy"><i></i> 録音はCloudflare上で処理します</span></header>
+  <header class="topbar"><a class="brand" href="/"><span class="brand-mark">余</span><span>余韻<span class="brand-sub"> / YO-IN</span></span></a><span class="privacy"><i></i> 録音はこの端末内で処理します</span></header>
   <main>
     <section class="intro"><div class="eyebrow">RECORDING EDITOR <span>01 / 01</span></div><h1>演奏のはじまりと、<br/><em>余韻の終わりを。</em></h1><p>録音を読み込むと、演奏の開始と終わりを自動で見つけます。<br class="desktop"/>境界を確認したら、左右のバランスを保って音量を整えましょう。</p></section>
     <section id="drop" class="dropzone" tabindex="0" role="button" aria-label="WAVファイルを選択"><div class="upload-icon">↑</div><div><strong>録音ファイルをドロップ</strong><span>または <u>ファイルを選択</u></span></div><small>48 kHz · 32-bit float · mono / stereo WAV</small><input id="file" type="file" accept=".wav,audio/wav" hidden /></section>
     <div id="error" class="error" hidden></div>
     <section id="workspace" hidden>
       <div class="file-row"><div class="file-icon">WAV</div><div class="file-meta"><strong id="filename"></strong><span id="fileinfo"></span></div><button id="replace" class="text-button">ファイルを変更</button></div>
-      <div id="preflight" class="preflight" hidden><div><strong>録音をCloudflare Workersで解析</strong><span>処理中の音声は一時保存され、24時間以内に自動削除します。</span></div><button id="begin-analysis" class="primary">解析を開始 <span>→</span></button></div>
+      <div id="preflight" class="preflight" hidden><div><strong>録音をこの端末内で解析</strong><span>音声は送信されません。書き出し時に端末内の一時保存領域を使う場合があります。</span></div><button id="begin-analysis" class="primary">解析を開始 <span>→</span></button></div>
       <div id="progress" class="progress" hidden><span class="spinner"></span><span id="progress-text">WASMを準備しています…</span></div>
       <div id="editor" hidden>
         <div class="section-head"><div><div class="eyebrow">TRIM PREVIEW</div><h2>クリップ範囲</h2></div><span id="status" class="status"></span></div>
@@ -29,6 +29,6 @@
     </section>
     <section id="empty-note" class="note"><span>i</span><p>解析結果は目安です。残響や拍手の入り方に合わせて、開始・終了を調整してから書き出してください。</p></section>
   </main>
-  <footer><span>余韻 — 演奏録音を、気持ちよく。</span><a href="/api/health" target="_blank">Worker status ↗</a></footer>
+  <footer><span>余韻 — 演奏録音を、気持ちよく。</span><span>音声のアップロード不要</span></footer>
   <script type="module" src="/app.js"></script>
 </body></html>

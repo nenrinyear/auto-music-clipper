@@ -2,24 +2,28 @@
   "name": "web",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
   "scripts": {
     "predeploy": "npm run build:wasm",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "start": "wrangler dev",
-    "build:wasm": "sh ./build-wasm.sh",
+    "build:wasm": "node ./scripts/build-wasm.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:ci": "vitest run",
+    "check:deploy": "wrangler deploy --dry-run --outdir dist",
+    "benchmark:wasm": "node ./scripts/benchmark-wasm.mjs",
     "test": "vitest",
-    "cf-typegen": "wrangler types",
+    "test:browser": "playwright test",
     "predev": "npm run build:wasm"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "^1.0.0",
+    "@playwright/test": "^1.56.0",
     "@types/node": "^26.6.3",
     "typescript": "^5.5.2",
     "vitest": "~4.1.0",
     "wrangler": "^4.141.0"
   },
-  "dependencies": {
-    "hono": "^4.13.9"
-  }
+  "dependencies": {}
 }
