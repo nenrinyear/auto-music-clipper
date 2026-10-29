@@ -73,7 +73,7 @@ pub fn finish_analysis(
     serde_json::to_string(&report).map_err(js_error)
 }
 
-/// Measure a chunk peak in Rust so the Worker can find one shared stereo gain.
+/// Measure a chunk peak in Rust so the browser can find one shared stereo gain.
 #[wasm_bindgen]
 pub fn measure_chunk_peak(samples: &[f32]) -> Result<f64, JsValue> {
     samples.iter().enumerate().try_fold(0.0_f64, |peak, (i, sample)| {
