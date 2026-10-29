@@ -44,3 +44,5 @@ cargo run -p audio-cli -- trim recording.wav \
 作業は [TODO](docs/TODO.md) の順に進めます。今回はClient WASMへの移行のみで、トリミング位置の可視化の強化とRØDE M5補正EQは別の変更に分けます。移行前のサーバー処理版には `worker-wasm-before-client` タグを付けています。
 
 設計の詳細は [`docs/spec.md`](docs/spec.md) を参照してください。
+
+公開方法は [Cloudflareデプロイ手順](docs/cloudflare-deploy.md) にまとめています。

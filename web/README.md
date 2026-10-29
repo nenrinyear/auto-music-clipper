@@ -33,13 +33,15 @@ npm --prefix web run dev
 
 ## Cloudflare公式GitHub連携
 
+初回接続から公開後の確認、手動デプロイ、トラブル対応までの手順は [Cloudflareデプロイ手順](../docs/cloudflare-deploy.md) を参照してください。
+
 | 設定 | 値 |
 | --- | --- |
 | Root directory | `web` |
 | Build command | `npm run build:wasm` |
 | Deploy command | `npx wrangler deploy` |
 | Build variable | `NODE_VERSION=22` |
-| Build watch paths | `web/**`, `crates/**`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml` |
+| Build watch paths | 初回は全体を対象にする。絞る場合も `web/**`, `crates/**`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml` を含める |
 
 依存パッケージの自動インストールは有効にします。Rustの共有クレートを参照するため、リポジトリ全体をチェックアウトする必要があります。Linuxにrustupがなければビルドスクリプトがチェックアウト内へ導入します。
 
