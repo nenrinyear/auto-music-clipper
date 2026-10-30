@@ -39,7 +39,10 @@ export async function parseWav(file) {
         format = 3;
       }
       if (format !== 3 || sampleRate !== RATE || bits !== 32 || ![1, 2].includes(channels)) {
-        throw Error('48 kHz・32-bit float・mono / stereoのWAVに対応しています。');
+        const encoding = format === 1 ? '整数PCM' : format === 3 ? 'float' : `形式コード 0x${format.toString(16)}`;
+        const channelLabel = channels === 1 ? 'mono' : channels === 2 ? 'stereo' : `${channels}チャンネル`;
+        const actual = `${sampleRate / 1000} kHz・${bits}-bit ${encoding}・${channelLabel}`;
+        throw Error(`このWAVは読み込めません。選択したファイル: ${actual}。対応形式: 48 kHz・32-bit float・mono / stereo。音声編集ソフトで対応形式のWAVに書き出してから、選び直してください。32-bit整数PCMは32-bit floatとは異なります。`);
       }
       if (blockAlign !== channels * 4 || byteRate !== sampleRate * blockAlign) invalid();
       fmt = { format, channels, sampleRate, blockAlign, bits };

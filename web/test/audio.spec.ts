@@ -8,6 +8,19 @@ wasm.initSync({ module: readFileSync(new URL('../public/wasm/audio_wasm_bg.wasm'
 const fileOf = (bytes: Buffer) => new File([new Uint8Array(bytes)], 'recording.wav', { type: 'audio/wav' });
 
 describe('client WASM audio processing', () => {
+  it.each([
+    { format: 1, bits: 24, rate: 48000, channels: 2, actual: '48 kHz・24-bit 整数PCM・stereo' },
+    { format: 1, bits: 32, rate: 48000, channels: 1, actual: '48 kHz・32-bit 整数PCM・mono' },
+    { format: 3, bits: 32, rate: 44100, channels: 2, actual: '44.1 kHz・32-bit float・stereo' },
+    { format: 3, bits: 32, rate: 48000, channels: 6, actual: '48 kHz・32-bit float・6チャンネル' },
+  ])('explains the detected unsupported format: $actual', async ({ format, bits, rate, channels, actual }) => {
+    const bytes = makeWav(1);
+    bytes.writeUInt16LE(format, 20); bytes.writeUInt16LE(channels, 22);
+    bytes.writeUInt32LE(rate, 24); bytes.writeUInt16LE(bits, 34);
+    await expect(parseWav(fileOf(bytes))).rejects.toThrow(actual);
+    await expect(parseWav(fileOf(bytes))).rejects.toThrow('書き出してから、選び直してください');
+  });
+
   it('analyzes across the 30-second seam and matches the continuous Rust analyzer', async () => {
     const bytes = makeWav(), file = fileOf(bytes), wav = await parseWav(file);
     const slice = vi.spyOn(file, 'slice');
