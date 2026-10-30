@@ -16,3 +16,26 @@ export function makeWav(seconds = 31, channels: 1 | 2 = 2): Buffer {
   }
   return bytes;
 }
+
+// Two movements with an intentional silent gap, followed by repeated applause.
+export function makeConcertWav(): Buffer {
+  const bytes = makeWav(8);
+  bytes.fill(0, 44);
+  for (const [start, end, frequency] of [[1, 2, 440], [5, 6, 660]]) {
+    for (let frame = start * RATE; frame < end * RATE; frame++) {
+      const sample = Math.sin(2 * Math.PI * frequency * frame / RATE) * .15;
+      bytes.writeFloatLE(sample, 44 + frame * 8);
+      bytes.writeFloatLE(sample * .5, 48 + frame * 8);
+    }
+  }
+  let random = 7;
+  for (let base = RATE * 6 + RATE / 3; base < RATE * 8; base += RATE / 3) {
+    for (let frame = base; frame < Math.min(base + 1200, RATE * 8); frame++) {
+      random = (Math.imul(random, 1664525) + 1013904223) >>> 0;
+      const sample = ((random >>> 8) / 16777216 - .5) * .8;
+      bytes.writeFloatLE(sample, 44 + frame * 8);
+      bytes.writeFloatLE(sample * .5, 48 + frame * 8);
+    }
+  }
+  return bytes;
+}
