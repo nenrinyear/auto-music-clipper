@@ -11,6 +11,7 @@ function setBusy(value) {
   for (const id of ['file', 'replace', 'begin-analysis', 'start', 'end', 'normalize', 'target', 'listen-start', 'listen-end', 'play', 'seek']) $(id).disabled = value;
   drop.setAttribute('aria-disabled', String(value));
   $('export').disabled = value || !analysis;
+  $('play').disabled = value || !!activePreview;
 }
 function getWorker() {
   if (audioWorker) return audioWorker;
@@ -152,6 +153,10 @@ function updateExportInfo() {
   if (!wav) return;
   const a = Number($('start').value), b = Number($('end').value), gain = $('normalize').checked ? '自動ノーマライズ' : 'ゲイン変更なし';
   $('export-info').textContent = `${clock(Math.max(0, b - a))} · ${gain}`;
+  const measured = measuredPreview?.key === JSON.stringify(currentPlan());
+  $('normalization-info').textContent = !$('normalize').checked ? 'ノーマライズなし（原音の音量）'
+    : measured ? `選択範囲で再計算済み · ${20 * Math.log10(measuredPreview.gain) >= 0 ? '+' : ''}${(20 * Math.log10(measuredPreview.gain)).toFixed(1)} dB（左右共通）`
+    : '選択範囲のピークで再計算します（試聴・書き出し時）';
 }
 function previewSettingsChanged() {
   stopPlayback(); updateExportInfo();
@@ -179,6 +184,7 @@ async function previewNormalization(plan) {
   try {
     const { gain } = await processAudio('measure', plan);
     measuredPreview = { key, gain };
+    updateExportInfo();
     return gain;
   } finally {
     $('progress').hidden = true; setBusy(false);
@@ -209,10 +215,11 @@ function updatePlayback() {
   const labels = { 'listen-start': '▶ 冒頭を試聴', 'listen-end': '▶ 終わりを試聴', play: '▶ 再生' };
   for (const [id, label] of Object.entries(labels)) {
     const active = activePreview === id;
-    $(id).textContent = active ? '■ 停止' : label;
+    $(id).textContent = label;
     $(id).setAttribute('aria-pressed', String(active));
   }
   $('stop').disabled = !activePreview && (!player || player.paused);
+  $('play').disabled = busy || !!activePreview;
   drawWave();
   if (player && !player.paused && !player.ended) animationFrame = requestAnimationFrame(updatePlayback);
 }
@@ -227,7 +234,6 @@ function seekPlayback(seconds) {
 }
 async function preview(seconds, button) {
   if (!player || busy) return;
-  if (activePreview === button) { stopPlayback(); return; }
   const audio = player, request = ++playbackRequest;
   activePreview = button;
   audio.pause(); seekPlayback(seconds); updatePlayback(); clearError();

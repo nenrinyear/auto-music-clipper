@@ -21,11 +21,12 @@ test('stops previews and synchronizes waveform, seeking and playback time', asyn
   await page.locator('#start').fill('4');
   await page.locator('#end').fill('27');
   await page.locator('#listen-start').click();
-  await expect(page.locator('#listen-start')).toHaveText('■ 停止');
+  await expect(page.getByRole('button', { name: '■ 停止', exact: true })).toHaveCount(1);
+  await expect(page.locator('#listen-start')).toHaveText('▶ 冒頭を試聴');
   await expect.poll(currentTime).toBeGreaterThan(4.1);
   await expect.poll(async () => Number(await seek.inputValue())).toBeGreaterThan(4.1);
   await expect(page.locator('#playback-time')).toContainText('0:04');
-  await page.locator('#listen-start').click();
+  await page.locator('#stop').click();
   await expect.poll(paused).toBe(true);
   await expect(page.locator('#listen-start')).toHaveAttribute('aria-pressed', 'false');
 
@@ -56,6 +57,8 @@ test('stops previews and synchronizes waveform, seeking and playback time', asyn
 
   await page.locator('#play').click();
   await expect.poll(paused).toBe(false);
+  await expect(page.getByRole('button', { name: '■ 停止', exact: true })).toHaveCount(1);
+  await expect(page.locator('#play')).toHaveText('▶ 再生');
   await seek.focus();
   await seek.press('Home');
   await expect.poll(currentTime).toBeLessThan(2);

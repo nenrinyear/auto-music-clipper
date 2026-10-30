@@ -92,6 +92,24 @@ test('previews and exports with the same stereo gain, including changed settings
   await expect.poll(async () => (await levels()).gain).toBeCloseTo(10 ** (-.5 / 20) / .8, 6);
   expect((await levels()).measurements).toBe(3);
   await page.locator('#stop').click();
+  // Remove the loud applause-like peak, then normalize the remaining performance again.
+  await page.locator('#start').fill('4');
+  await page.locator('#end').fill('6');
+  await expect(page.locator('#normalization-info')).toContainText('再計算します');
+  await page.locator('#listen-start').click();
+  await expect.poll(async () => (await levels()).gain).toBeCloseTo(10 ** (-.5 / 20) / .25, 6);
+  expect((await levels()).measurements).toBe(4);
+  await expect(page.locator('#normalization-info')).toContainText('再計算済み');
+  const trimmedDownload = page.waitForEvent('download');
+  await page.locator('#export').click();
+  const trimmed = await readFile((await (await trimmedDownload).path())!);
+  let trimmedPeak = 0;
+  for (let offset = 56; offset < trimmed.length; offset += 8) {
+    const left = trimmed.readFloatLE(offset), right = trimmed.readFloatLE(offset + 4);
+    trimmedPeak = Math.max(trimmedPeak, Math.abs(left));
+    if (offset % 997 === 0 && Math.abs(left) > .01) expect(right / left).toBeCloseTo(.5, 6);
+  }
+  expect(trimmedPeak).toBeCloseTo(10 ** (-.5 / 20), 6);
   await expect(page.locator('#progress')).toBeHidden();
   await expect(page.locator('#error')).toBeHidden();
 });
