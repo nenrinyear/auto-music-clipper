@@ -8,11 +8,17 @@ test('processes and downloads locally without any audio upload', async ({ page }
   page.context().on('request', request => requests.push({ method: request.method(), url: request.url() }));
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
+  await expect(page.locator('#progress')).toBeHidden();
+  await expect(page.locator('#preflight')).toBeHidden();
   await expect(page.locator('.privacy')).toContainText('この端末内');
   const input = makeWav();
   await page.locator('#file').setInputFiles({ name: 'recording.wav', mimeType: 'audio/wav', buffer: input });
+  await expect(page.locator('#empty-note')).toBeHidden();
+  await expect(page.locator('#progress')).toBeHidden();
   await page.getByRole('button', { name: '解析を開始' }).click();
   await expect(page.locator('#editor')).toBeVisible();
+  await expect(page.locator('#progress')).toBeHidden();
+  await expect(page.locator('#preflight')).toBeHidden();
   await expect(page.locator('#export')).toBeEnabled();
   await page.locator('#start').fill('4');
   await page.locator('#end').fill('5');
