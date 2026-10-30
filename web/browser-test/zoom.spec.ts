@@ -15,7 +15,9 @@ test('zooms, pans and edits boundaries using the visible time interval', async (
   await expect(page.locator('#duration-label')).toHaveText('0:06.50');
   await expect(page.locator('#zoom-level')).toHaveText('6.2×');
   await expect(page.locator('#wave-detail')).toHaveText('');
-  const canvas = page.locator('#wave'), bounds = (await canvas.boundingBox())!;
+  const canvas = page.locator('#wave');
+  await canvas.scrollIntoViewIfNeeded();
+  const bounds = (await canvas.boundingBox())!;
   // Handle at 4 s is in the center of a 1.5–6.5 s viewport.
   await page.mouse.move(bounds.x + bounds.width * .5, bounds.y + bounds.height / 2);
   await page.mouse.down();

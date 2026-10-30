@@ -29,10 +29,14 @@
           <div class="wave-labels"><span id="wave-start-label">0:00</span><span id="duration-label"></span></div><canvas id="wave" width="1200" height="180" aria-label="録音の波形。クリックで再生位置を移動、両端の線をドラッグして切り出し位置を調整"></canvas>
           <label class="wave-pan-label">表示位置<input id="wave-pan" type="range" min="0" max="0" value="0" step="0.01" aria-label="波形の表示位置" disabled /></label>
           <p id="wave-detail" class="wave-help" role="status"></p>
+          <div class="wave-legend" aria-label="波形の凡例"><span class="legend-keep">明るい区間：保存</span><span class="legend-cut">暗い区間：カット</span><span class="legend-detected">点線：検出候補・自動境界</span><span class="legend-selected">緑の実線：保存境界</span></div>
+          <div id="detection-markers" class="detection-markers" role="group" aria-label="自動検出の候補"></div>
+          <p id="break-info" class="wave-help"></p>
           <div class="playback"><button id="play" class="secondary" aria-pressed="false">▶ 再生</button><button id="stop" class="secondary" disabled>■ 停止</button><output id="playback-time" for="seek">0:00 / 0:00</output></div>
           <input id="seek" class="seek" type="range" min="0" max="0" step="0.01" value="0" aria-label="再生位置" />
           <p class="wave-help">波形をクリックしてシーク · 両端の緑の線をドラッグして切り出し位置を調整</p>
           <div class="range-inputs"><label>開始 <input id="start" type="number" min="0" step="0.01" /></label><label>終了 <input id="end" type="number" min="0" step="0.01" /></label><span id="selection-length"></span></div></div>
+        <div class="trim-summary"><p id="trim-state" class="wave-help" role="status"></p><button id="reset-trim" class="secondary" disabled>自動検出の範囲に戻す</button></div>
         <div class="controls"><button id="listen-start" class="secondary" aria-pressed="false">▶ 冒頭を試聴</button><button id="listen-end" class="secondary" aria-pressed="false">▶ 終わりを試聴</button><label class="gain-control">音量を均等に <input id="normalize" type="checkbox" checked /><span class="switch"></span></label></div>
         <div class="gain-row"><div><strong>ステレオバランスを維持</strong><span>左右に同じゲインを適用します</span></div><label class="gain-label">ピーク上限 <select id="target"><option value="-1">−1 dBFS</option><option value="-0.5">−0.5 dBFS</option><option value="0">0 dBFS</option></select></label></div>
         <p id="normalization-info" class="wave-help" role="status">選択範囲のピークで再計算します（試聴・書き出し時）</p>

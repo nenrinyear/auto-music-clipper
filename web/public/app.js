@@ -1,5 +1,6 @@
 import { parseWav, RATE } from './audio-processing.js';
 import { WaveformView } from './waveform-view.js';
+import { detectionMarkers, selectionFrames, frameSeconds, frameTime, drawTrimOverlay } from './trim-view.js';
 
 const $ = id => document.getElementById(id);
 const drop = $('drop'), fileInput = $('file'), workspace = $('workspace');
@@ -56,6 +57,17 @@ $('replace').addEventListener('click', () => fileInput.click());
 $('begin-analysis').addEventListener('click', startAnalysis);
 $('start').addEventListener('input', updateRange);
 $('end').addEventListener('input', updateRange);
+for (const id of ['start', 'end']) $(id).addEventListener('change', () => {
+  const frame = selectionFrames($(id).value, $(id).value).startFrame;
+  if (Number.isSafeInteger(frame)) $(id).value = frameSeconds(frame);
+  updateRange();
+});
+$('reset-trim').addEventListener('click', () => {
+  if (busy || !analysis) return;
+  $('start').value = frameSeconds(analysis.start_frame ?? 0);
+  $('end').value = frameSeconds(analysis.end_frame ?? wav.frames);
+  updateRange();
+});
 $('wave').addEventListener('pointerdown', beginWaveDrag);
 $('wave').addEventListener('pointermove', e => { if (dragMode) moveWavePointer(e); });
 $('wave').addEventListener('pointerup', () => { dragMode = undefined; });
@@ -80,6 +92,7 @@ for (const boundary of ['start', 'end']) {
   $(`zoom-${boundary}`).addEventListener('click', () => waveView.set(Number($(boundary).value) - 2.5, 5));
 }
 $('wave-pan').addEventListener('input', () => waveView.set(Number($('wave-pan').value), waveView.span));
+new ResizeObserver(drawWave).observe($('wave'));
 
 async function loadFile(file) {
   if (busy) return;
@@ -116,8 +129,9 @@ async function startAnalysis() {
     envelope = analysis.waveform;
     waveView.reset(sourceFile, wav, envelope);
     updateWaveView();
-    $('start').value = (analysis.start_frame == null ? 0 : analysis.start_frame / RATE).toFixed(5);
-    $('end').value = (analysis.end_frame == null ? wav.frames / RATE : analysis.end_frame / RATE).toFixed(5);
+    $('start').value = frameSeconds(analysis.start_frame ?? 0);
+    $('end').value = frameSeconds(analysis.end_frame ?? wav.frames);
+    showDetectionMarkers();
     $('status').textContent = analysis.status === 'ready' ? '自動検出 · 確認してください' : '要確認 · 手動調整してください';
     $('editor').hidden = false;
   } catch (error) { $('preflight').hidden = false; showError(error.message || String(error)); }
@@ -129,15 +143,27 @@ function drawWave() {
   ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#28342d'; ctx.fillRect(0, h / 2, w, 1);
   waveView.draw(ctx, w, h);
   if (!wav || !waveView.span) return;
-  const a = waveView.xAt(Number($('start').value || 0), w);
-  const b = waveView.xAt(Number($('end').value || 0), w);
-  ctx.fillStyle = 'rgba(12,17,14,.61)'; ctx.fillRect(0, 0, a, h); ctx.fillRect(b, 0, w - b, h);
-  ctx.fillStyle = '#d4ef83'; ctx.fillRect(a, 0, 2, h); ctx.fillRect(b - 2, 0, 2, h);
+  drawTrimOverlay(ctx, waveView, w, h, analysis, selectionFrames($('start').value, $('end').value), { x: w / (canvas.clientWidth || w), y: h / (canvas.clientHeight || h) });
   const position = waveView.xAt(player?.currentTime || 0, w);
   if (position >= 0 && position <= w) {
     ctx.fillStyle = '#e5a46e'; ctx.fillRect(Math.min(w - 2, position), 0, 2, h);
     ctx.beginPath(); ctx.moveTo(position - 6, 0); ctx.lineTo(position + 6, 0); ctx.lineTo(position, 9); ctx.fill();
   }
+}
+function showDetectionMarkers() {
+  const list = $('detection-markers'); list.replaceChildren();
+  const confidenceLabels = { high: '高', medium: '中', low: '低・要確認' };
+  for (const { key, label, color } of detectionMarkers) {
+    const candidate = analysis[key], item = document.createElement('button');
+    item.type = 'button'; item.className = 'marker-item'; item.dataset.marker = key;
+    item.style.setProperty('--marker-color', color);
+    item.disabled = candidate == null;
+    item.textContent = candidate ? `${label} ${frameTime(candidate.frame)} · 確度 ${confidenceLabels[candidate.confidence] || '要確認'}` : `${label}：未検出`;
+    if (candidate) item.addEventListener('click', () => waveView.set(candidate.frame / RATE - 2.5, 5));
+    list.append(item);
+  }
+  const gaps = analysis.possible_breaks || [];
+  $('break-info').textContent = gaps.length ? `楽章間候補 ${gaps.length}か所（切り出し範囲内は保持）: ${gaps.map(gap => `${frameTime(gap.start_frame)}–${frameTime(gap.end_frame)}`).join(' / ')}` : '範囲内の音声・無音は連続して保持します。';
 }
 function updateWaveView() {
   const preciseClock = seconds => `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(2).padStart(5, '0')}`;
@@ -158,7 +184,8 @@ function beginWaveDrag(event) {
   const bounds = $('wave').getBoundingClientRect();
   const x = event.clientX - bounds.left;
   const distance = boundary => {
-    const position = waveView.xAt(Number($(boundary).value), bounds.width);
+    const frame = selectionFrames($(boundary).value, $(boundary).value).startFrame;
+    const position = waveView.xAt(frame / RATE, bounds.width);
     return position >= 0 && position <= bounds.width ? Math.abs(x - position) : Infinity;
   };
   const a = distance('start'), b = distance('end');
@@ -171,15 +198,19 @@ function moveWavePointer(event) {
   const bounds = $('wave').getBoundingClientRect(), fraction = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
   const seconds = waveView.timeAt(fraction);
   if (dragMode === 'seek') seekPlayback(seconds);
-  else if (dragMode) { $(dragMode).value = seconds.toFixed(5); updateRange(); }
+  else if (dragMode) { $(dragMode).value = frameSeconds(Math.round(seconds * RATE)); updateRange(); }
 }
 function updateRange() {
   if (!wav) return;
   stopPlayback();
-  const a = Number($('start').value), b = Number($('end').value), duration = wav.frames / RATE;
-  const valid = Number.isFinite(a) && Number.isFinite(b) && a >= 0 && b > a && Math.round(b * RATE) <= wav.frames && Math.round(b * RATE) > Math.round(a * RATE);
+  const { startFrame, endFrame } = currentPlan();
+  const valid = Number.isSafeInteger(startFrame) && Number.isSafeInteger(endFrame) && startFrame >= 0 && endFrame <= wav.frames && endFrame > startFrame;
   $('export').disabled = busy || !analysis || !valid;
-  $('selection-length').textContent = valid ? `${clock(Math.min(duration, b) - a)}を書き出し` : '範囲が不正です';
+  $('selection-length').textContent = valid ? `${clock((endFrame - startFrame) / RATE)}を書き出し` : '範囲が不正です';
+  const rangeLabel = analysis?.start_frame == null || analysis?.end_frame == null ? '自動検出なし・手動指定の範囲'
+    : startFrame === analysis.start_frame && endFrame === analysis.end_frame ? '自動検出の範囲' : '手動調整した範囲';
+  $('trim-state').textContent = !valid ? '開始・終了位置を確認してください。' : `${rangeLabel} · ${frameTime(startFrame)}–${frameTime(endFrame)} · ${(endFrame - startFrame).toLocaleString('ja-JP')}サンプル（終了位置は含みません）`;
+  $('reset-trim').disabled = busy || !analysis || (startFrame === (analysis.start_frame ?? 0) && endFrame === (analysis.end_frame ?? wav.frames));
   drawWave(); updateExportInfo();
 }
 function updateExportInfo() {
@@ -195,7 +226,7 @@ function previewSettingsChanged() {
   stopPlayback(); updateExportInfo();
 }
 function currentPlan() {
-  return { startFrame: Math.round(Number($('start').value) * RATE), endFrame: Math.round(Number($('end').value) * RATE), targetDb: Number($('target').value), normalize: $('normalize').checked };
+  return { ...selectionFrames($('start').value, $('end').value), targetDb: Number($('target').value), normalize: $('normalize').checked };
 }
 function connectPreview() {
   previewContext ??= new AudioContext({ sampleRate: RATE });

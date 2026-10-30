@@ -37,7 +37,9 @@ test('stops previews and synchronizes waveform, seeking and playback time', asyn
   await expect.poll(paused).toBe(true);
   await expect(page.locator('#listen-end')).toHaveAttribute('aria-pressed', 'false');
 
-  const canvas = page.locator('#wave'), bounds = (await canvas.boundingBox())!;
+  const canvas = page.locator('#wave');
+  await canvas.scrollIntoViewIfNeeded();
+  const bounds = (await canvas.boundingBox())!;
   await canvas.click({ position: { x: bounds.width / 2, y: bounds.height / 2 } });
   await expect.poll(currentTime).toBeCloseTo(15.5, 1);
   await expect(page.locator('#start')).toHaveValue('4');
