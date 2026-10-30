@@ -3,10 +3,11 @@ import { parseWav, RATE } from './audio-processing.js';
 const $ = id => document.getElementById(id);
 const drop = $('drop'), fileInput = $('file'), workspace = $('workspace');
 let sourceFile, wav, objectUrl, analysis, envelope = [], busy = false, audioWorker, pending, sequence = 0, player;
+let playbackRequest = 0, activePreview, animationFrame, dragMode;
 
 function setBusy(value) {
   busy = value;
-  for (const id of ['file', 'replace', 'begin-analysis', 'start', 'end', 'normalize', 'target']) $(id).disabled = value;
+  for (const id of ['file', 'replace', 'begin-analysis', 'start', 'end', 'normalize', 'target', 'listen-start', 'listen-end', 'play', 'seek']) $(id).disabled = value;
   drop.setAttribute('aria-disabled', String(value));
   $('export').disabled = value || !analysis;
 }
@@ -51,17 +52,24 @@ $('replace').addEventListener('click', () => fileInput.click());
 $('begin-analysis').addEventListener('click', startAnalysis);
 $('start').addEventListener('input', updateRange);
 $('end').addEventListener('input', updateRange);
-$('wave').addEventListener('pointerdown', moveBoundary);
-$('wave').addEventListener('pointermove', e => { if (e.buttons & 1) moveBoundary(e); });
+$('wave').addEventListener('pointerdown', beginWaveDrag);
+$('wave').addEventListener('pointermove', e => { if (dragMode) moveWavePointer(e); });
+$('wave').addEventListener('pointerup', () => { dragMode = undefined; });
+$('wave').addEventListener('pointercancel', () => { dragMode = undefined; });
+$('wave').addEventListener('lostpointercapture', () => { dragMode = undefined; });
 $('normalize').addEventListener('change', updateExportInfo);
 $('target').addEventListener('change', updateExportInfo);
-$('listen-start').addEventListener('click', () => preview(Number($('start').value)));
-$('listen-end').addEventListener('click', () => preview(Math.max(0, Number($('end').value) - 8)));
+$('listen-start').addEventListener('click', () => preview(Number($('start').value), 'listen-start'));
+$('listen-end').addEventListener('click', () => preview(Math.max(0, Number($('end').value) - 8), 'listen-end'));
+$('play').addEventListener('click', () => preview(player?.ended ? 0 : player?.currentTime || 0, 'play'));
+$('stop').addEventListener('click', stopPlayback);
+$('seek').addEventListener('input', () => seekPlayback(Number($('seek').value)));
 $('export').addEventListener('click', exportWav);
 
 async function loadFile(file) {
   if (busy) return;
-  clearError(); setBusy(true); player?.pause();
+  clearError(); setBusy(true); stopPlayback();
+  if (player) { player.removeAttribute('src'); player.load(); player = undefined; }
   if (objectUrl) URL.revokeObjectURL(objectUrl);
   objectUrl = undefined; sourceFile = undefined; wav = undefined; analysis = undefined; envelope = [];
   workspace.hidden = true; $('empty-note').hidden = false;
@@ -74,6 +82,7 @@ async function loadFile(file) {
     $('fileinfo').textContent = `${wav.channels === 2 ? 'Stereo' : 'Mono'} · 48 kHz · 32-bit float · ${clock(seconds)} · ${formatBytes(file.size)}`;
     $('duration-label').textContent = clock(seconds);
     objectUrl = URL.createObjectURL(file);
+    setupPlayer();
     workspace.hidden = false; $('empty-note').hidden = true; $('preflight').hidden = false;
   } catch (error) { showError(error.message || String(error)); }
   finally { setBusy(false); }
@@ -81,6 +90,7 @@ async function loadFile(file) {
 
 async function startAnalysis() {
   if (busy || !sourceFile || !wav) return;
+  stopPlayback();
   setBusy(true); clearError(); $('preflight').hidden = true; $('progress').hidden = false;
   $('progress-text').textContent = '端末内で解析を準備しています…';
   try {
@@ -104,13 +114,27 @@ function drawWave() {
   const b = Math.max(0, Math.min(1, Number($('end').value || 0) / (wav.frames / RATE))) * w;
   ctx.fillStyle = 'rgba(12,17,14,.61)'; ctx.fillRect(0, 0, a, h); ctx.fillRect(b, 0, w - b, h);
   ctx.fillStyle = '#d4ef83'; ctx.fillRect(a, 0, 2, h); ctx.fillRect(b - 2, 0, 2, h);
+  const position = Math.max(0, Math.min(1, (player?.currentTime || 0) / (wav.frames / RATE))) * w;
+  ctx.fillStyle = '#e5a46e'; ctx.fillRect(Math.min(w - 2, position), 0, 2, h);
+  ctx.beginPath(); ctx.moveTo(position - 6, 0); ctx.lineTo(position + 6, 0); ctx.lineTo(position, 9); ctx.fill();
 }
-function moveBoundary(event) {
+function beginWaveDrag(event) {
+  if (busy || !wav || $('editor').hidden || event.button !== 0) return;
+  const bounds = $('wave').getBoundingClientRect(), duration = wav.frames / RATE;
+  const x = event.clientX - bounds.left;
+  const a = Number($('start').value) / duration * bounds.width;
+  const b = Number($('end').value) / duration * bounds.width;
+  dragMode = Math.min(Math.abs(x - a), Math.abs(x - b)) <= 12
+    ? (Math.abs(x - a) <= Math.abs(x - b) ? 'start' : 'end') : 'seek';
+  $('wave').setPointerCapture(event.pointerId); event.preventDefault();
+  moveWavePointer(event);
+}
+function moveWavePointer(event) {
   if (busy || !wav || $('editor').hidden) return;
   const bounds = $('wave').getBoundingClientRect(), fraction = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
-  const seconds = fraction * (wav.frames / RATE), start = Number($('start').value), end = Number($('end').value);
-  const input = Math.abs(seconds - start) <= Math.abs(seconds - end) ? $('start') : $('end');
-  input.value = seconds.toFixed(5); updateRange();
+  const seconds = fraction * (wav.frames / RATE);
+  if (dragMode === 'seek') seekPlayback(seconds);
+  else if (dragMode) { $(dragMode).value = seconds.toFixed(5); updateRange(); }
 }
 function updateRange() {
   if (!wav) return;
@@ -125,14 +149,62 @@ function updateExportInfo() {
   const a = Number($('start').value), b = Number($('end').value), gain = $('normalize').checked ? '自動ノーマライズ' : 'ゲイン変更なし';
   $('export-info').textContent = `${clock(Math.max(0, b - a))} · ${gain}`;
 }
-function preview(seconds) {
-  if (!objectUrl) return;
-  player?.pause(); player = new Audio(objectUrl);
-  player.addEventListener('error', () => showError('このブラウザではWAVを試聴できません。'), { once: true });
-  player.addEventListener('loadedmetadata', () => { player.currentTime = seconds; player.play().catch(() => showError('このブラウザではWAVを試聴できません。')); }, { once: true });
+function setupPlayer() {
+  const audio = player = new Audio(objectUrl);
+  audio.preload = 'metadata';
+  $('seek').max = String(wav.frames / RATE);
+  for (const event of ['loadedmetadata', 'timeupdate', 'seeked', 'play', 'pause', 'ended']) {
+    audio.addEventListener(event, () => {
+      if (player !== audio) return;
+      if (event === 'ended') { activePreview = undefined; playbackRequest++; }
+      updatePlayback();
+    });
+  }
+  audio.addEventListener('error', () => {
+    if (player !== audio) return;
+    stopPlayback(); showError('このブラウザではWAVを試聴できません。');
+  });
+  updatePlayback();
+}
+function updatePlayback() {
+  cancelAnimationFrame(animationFrame);
+  const seconds = player?.currentTime || 0;
+  $('seek').value = String(seconds);
+  $('playback-time').textContent = `${clock(seconds)} / ${clock(wav ? wav.frames / RATE : 0)}`;
+  const labels = { 'listen-start': '▶ 冒頭を試聴', 'listen-end': '▶ 終わりを試聴', play: '▶ 再生' };
+  for (const [id, label] of Object.entries(labels)) {
+    const active = activePreview === id;
+    $(id).textContent = active ? '■ 停止' : label;
+    $(id).setAttribute('aria-pressed', String(active));
+  }
+  $('stop').disabled = !activePreview && (!player || player.paused);
+  drawWave();
+  if (player && !player.paused && !player.ended) animationFrame = requestAnimationFrame(updatePlayback);
+}
+function stopPlayback() {
+  playbackRequest++; activePreview = undefined;
+  player?.pause(); updatePlayback();
+}
+function seekPlayback(seconds) {
+  if (!player || !wav || busy) return;
+  player.currentTime = Math.max(0, Math.min(wav.frames / RATE, seconds));
+  updatePlayback();
+}
+async function preview(seconds, button) {
+  if (!player || busy) return;
+  if (activePreview === button) { stopPlayback(); return; }
+  const audio = player, request = ++playbackRequest;
+  activePreview = button;
+  seekPlayback(seconds); updatePlayback();
+  try { await audio.play(); }
+  catch {
+    if (request !== playbackRequest || player !== audio) return;
+    stopPlayback(); showError('このブラウザではWAVを試聴できません。');
+  }
 }
 async function exportWav() {
   if (busy || !sourceFile || !wav || !analysis) return;
+  stopPlayback();
   const plan = { startFrame: Math.round(Number($('start').value) * RATE), endFrame: Math.round(Number($('end').value) * RATE), targetDb: Number($('target').value), normalize: $('normalize').checked };
   setBusy(true); clearError(); $('export').textContent = '書き出し中…'; $('progress').hidden = false;
   $('progress-text').textContent = '端末内でWAVを書き出しています…';

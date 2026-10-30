@@ -21,8 +21,12 @@
       <div id="progress" class="progress" hidden><span class="spinner"></span><span id="progress-text">WASMを準備しています…</span></div>
       <div id="editor" hidden>
         <div class="section-head"><div><div class="eyebrow">TRIM PREVIEW</div><h2>クリップ範囲</h2></div><span id="status" class="status"></span></div>
-        <div class="wave-card"><div class="wave-labels"><span>0:00</span><span id="duration-label"></span></div><canvas id="wave" width="1200" height="180" aria-label="録音の波形"></canvas><div class="range-inputs"><label>開始 <input id="start" type="number" min="0" step="0.01" /></label><label>終了 <input id="end" type="number" min="0" step="0.01" /></label><span id="selection-length"></span></div></div>
-        <div class="controls"><button id="listen-start" class="secondary">▶ 冒頭を試聴</button><button id="listen-end" class="secondary">▶ 終わりを試聴</button><label class="gain-control">音量を均等に <input id="normalize" type="checkbox" checked /><span class="switch"></span></label></div>
+        <div class="wave-card"><div class="wave-labels"><span>0:00</span><span id="duration-label"></span></div><canvas id="wave" width="1200" height="180" aria-label="録音の波形。クリックで再生位置を移動、両端の線をドラッグして切り出し位置を調整"></canvas>
+          <div class="playback"><button id="play" class="secondary" aria-pressed="false">▶ 再生</button><button id="stop" class="secondary" disabled>■ 停止</button><output id="playback-time" for="seek">0:00 / 0:00</output></div>
+          <input id="seek" class="seek" type="range" min="0" max="0" step="0.01" value="0" aria-label="再生位置" />
+          <p class="wave-help">波形をクリックしてシーク · 両端の緑の線をドラッグして切り出し位置を調整</p>
+          <div class="range-inputs"><label>開始 <input id="start" type="number" min="0" step="0.01" /></label><label>終了 <input id="end" type="number" min="0" step="0.01" /></label><span id="selection-length"></span></div></div>
+        <div class="controls"><button id="listen-start" class="secondary" aria-pressed="false">▶ 冒頭を試聴</button><button id="listen-end" class="secondary" aria-pressed="false">▶ 終わりを試聴</button><label class="gain-control">音量を均等に <input id="normalize" type="checkbox" checked /><span class="switch"></span></label></div>
         <div class="gain-row"><div><strong>ステレオバランスを維持</strong><span>左右に同じゲインを適用します</span></div><label class="gain-label">ピーク上限 <select id="target"><option value="-1">−1 dBFS</option><option value="-0.5">−0.5 dBFS</option><option value="0">0 dBFS</option></select></label></div>
         <div class="export-row"><div><span class="export-title">仕上がり</span><span id="export-info">境界を確認してください</span></div><button id="export" class="primary" disabled>WAVを書き出す <span>↓</span></button></div>
       </div>
