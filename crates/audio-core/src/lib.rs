@@ -365,7 +365,7 @@ fn build_report(
         issues.push("music_not_found".into());
         return AnalysisReport {
             schema_version: 1,
-            algorithm_version: "0.1.0-heuristic".into(),
+            algorithm_version: "0.2.0-heuristic".into(),
             sample_rate: SAMPLE_RATE,
             channels: channels as u16,
             total_frames: total,
@@ -384,20 +384,37 @@ fn build_report(
     }
     let first = plausible[0];
     let raw_last = *plausible.last().unwrap();
+    // Room/microphone coloration makes real applause much less spectrally flat
+    // than white-noise fixtures. Compare it with this recording's active sound.
+    let mut active_flatness: Vec<f32> = features.iter()
+        .filter(|f| f.rms_db > floor + 8.0)
+        .map(|f| f.flatness).collect();
+    active_flatness.sort_by(|a, b| a.total_cmp(b));
+    let tonal_flatness = active_flatness.get(active_flatness.len() / 2).copied().unwrap_or(0.02);
+    let clap_flatness = (tonal_flatness * 8.0).clamp(0.008, 0.20);
+    let quiet_floor = levels.get(levels.len() / 100).copied().unwrap_or(floor);
     let clap_like = |idx: usize| {
         features[idx].rms_db > floor + 8.0
-            && features[idx].flatness > 0.20
-            && features[idx].flux > 0.03
+            && features[idx].flatness > clap_flatness
+            && features[idx].flux > 0.15
+    };
+    // Several overlapping FFT windows of one cymbal hit are not several claps.
+    let repeated_onsets = |start: usize, end: usize| {
+        let mut count = 0;
+        let mut next = start;
+        for i in start..(start + 100).min(end) {
+            if i >= next && clap_like(i) {
+                count += 1;
+                next = i + 8; // At least 80 ms between distinct attacks.
+            }
+        }
+        count >= 3
     };
     // If the final active component contains repeated broadband onsets, treat it
     // as a possible applause region and keep the preceding music component.
     let repeated_clap_start = if plausible.len() > 1 {
         (raw_last.0..raw_last.1).find(|&i| {
-            clap_like(i)
-                && (i..(i + 100).min(raw_last.1))
-                    .filter(|&j| clap_like(j))
-                    .count()
-                    >= 3
+            clap_like(i) && repeated_onsets(i, raw_last.1)
         })
     } else {
         None
@@ -411,6 +428,7 @@ fn build_report(
     let last_idx = last.1.saturating_sub(1).min(features.len() - 1);
     let mut possible_breaks = Vec::new();
     for pair in plausible.windows(2) {
+        if pair[1].0 >= last.1 { continue; } // Do not label the pre-applause tail as a movement break.
         let a = features[pair[0].1.saturating_sub(1)].center_frame;
         let b = features[pair[1].0].center_frame;
         if b.saturating_sub(a) >= 2 * SAMPLE_RATE as u64 {
@@ -430,16 +448,19 @@ fn build_report(
     // transient (for example a final cymbal) is not enough evidence.
     let candidate_clap = repeated_clap_start.or_else(|| {
         (last_idx + 1..features.len()).find(|&i| {
-            clap_like(i)
-                && (i..(i + 100).min(features.len()))
-                    .filter(|&j| clap_like(j))
-                    .count()
-                    >= 3
+            clap_like(i) && repeated_onsets(i, features.len())
         })
+    }).map(|anchor| {
+        // Once repeated applause is established, include the quieter first
+        // attacks preceding its loud portion, without searching back into music.
+        let first = anchor.saturating_sub(200).max(last_idx + 1);
+        (first..anchor).find(|&i| features[i].flatness > clap_flatness
+            && features[i].flux > 0.15 && features[i].rms_db > quiet_floor)
+            .unwrap_or(anchor)
     });
     let tail_search_end = candidate_clap.unwrap_or(features.len());
     let mut tail_idx = last_idx;
-    let tail_threshold = floor + 3.0;
+    let tail_threshold = quiet_floor + 6.0;
     let required_tail_frames = (800.0 / 10.0) as usize;
     let mut quiet_run = 0usize;
     let mut found_tail = false;
@@ -466,7 +487,9 @@ fn build_report(
             .saturating_add(config.post_roll_ms as u64 * 48)
             .min(total)
     } else if candidate_clap.is_some() {
-        music_end_frame
+        // With no confirmed quiet tail, retain the decay up to the applause
+        // guard instead of cutting at the last sustained-music feature.
+        total
     } else {
         total
     };
@@ -477,7 +500,7 @@ fn build_report(
         Candidate {
             frame,
             confidence: Confidence::Low,
-            reason: "broadband_transient_after_last_music".into(),
+            reason: "repeated_colored_broadband_onsets_after_music".into(),
         }
     });
     if applause.is_some() {
@@ -504,7 +527,9 @@ fn build_report(
             .iter()
             .take(50)
             .all(|f| f.rms_db <= floor + 6.0);
-    let end_conf = if has_quiet_tail && applause.is_none() {
+    let end_conf = if !found_tail {
+        Confidence::Low
+    } else if has_quiet_tail && applause.is_none() {
         Confidence::High
     } else if tail_idx < features.len() - 1 {
         Confidence::Medium
@@ -527,7 +552,7 @@ fn build_report(
     let tail = Candidate {
         frame: tail_end,
         confidence: end_conf,
-        reason: "energy_returned_near_estimated_noise_floor".into(),
+        reason: if found_tail { "energy_returned_near_estimated_noise_floor" } else { "quiet_tail_not_confirmed_last_music_reference" }.into(),
     };
     if end_frame <= start_frame {
         issues.push("invalid_trim_bounds".into());
@@ -541,7 +566,7 @@ fn build_report(
         };
     AnalysisReport {
         schema_version: 1,
-        algorithm_version: "0.1.0-heuristic".into(),
+        algorithm_version: "0.2.0-heuristic".into(),
         sample_rate: SAMPLE_RATE,
         channels: channels as u16,
         total_frames: total,
@@ -604,7 +629,7 @@ fn empty_report(
 ) -> AnalysisReport {
     AnalysisReport {
         schema_version: 1,
-        algorithm_version: "0.1.0-heuristic".into(),
+        algorithm_version: "0.2.0-heuristic".into(),
         sample_rate: SAMPLE_RATE,
         channels: channels as u16,
         total_frames: total,
@@ -907,5 +932,46 @@ mod tests {
         );
         assert!(report.end_frame.unwrap() < applause);
         assert!(matches!(report.status, Status::NeedsReview));
+    }
+
+    #[test]
+    fn detects_colored_applause_from_its_quieter_first_attack_but_not_one_transient() {
+        for repeated in [true, false] {
+            let total = SAMPLE_RATE as usize * 8;
+            let mut audio = vec![0.0_f32; total * 2];
+            for frame in SAMPLE_RATE as usize..SAMPLE_RATE as usize * 6 {
+                let x = (2.0 * PI * 440.0 * frame as f64 / SAMPLE_RATE as f64).sin() as f32 * 0.1;
+                audio[frame * 2] = x;
+                audio[frame * 2 + 1] = x * 0.5;
+            }
+            let first_clap = SAMPLE_RATE as usize * 6 + SAMPLE_RATE as usize / 3;
+            let mut random = 7_u32;
+            let mut filtered = 0.0_f32;
+            let mut position = first_clap;
+            let mut event = 0;
+            while position < total {
+                let gain = if event == 0 { 0.02 } else { 0.5 };
+                for frame in position..(position + 1200).min(total) {
+                    random = random.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                    let noise = (random >> 8) as f32 / 16_777_216.0 - 0.5;
+                    filtered += 0.12 * (noise - filtered);
+                    audio[frame * 2] = filtered * gain;
+                    audio[frame * 2 + 1] = filtered * gain * 0.5;
+                }
+                if !repeated { break; }
+                event += 1; position += SAMPLE_RATE as usize / 3;
+            }
+            let mut analyzer = Analyzer::new(2, AnalysisConfig::default()).unwrap();
+            analyzer.push(&audio).unwrap();
+            let report = analyzer.finish().unwrap();
+            if repeated {
+                let onset = report.final_applause_start.unwrap().frame as usize;
+                assert!(onset.abs_diff(first_clap) < SAMPLE_RATE as usize / 10, "onset={onset}");
+                assert!(report.end_frame.unwrap() < first_clap as u64);
+                assert!(report.end_frame.unwrap() > SAMPLE_RATE as u64 * 6);
+            } else {
+                assert!(report.final_applause_start.is_none(), "one transient must not be classified as repeated applause");
+            }
+        }
     }
 }
