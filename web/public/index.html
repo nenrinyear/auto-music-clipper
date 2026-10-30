@@ -21,7 +21,14 @@
       <div id="progress" class="progress" hidden><span class="spinner"></span><span id="progress-text">WASMを準備しています…</span></div>
       <div id="editor" hidden>
         <div class="section-head"><div><div class="eyebrow">TRIM PREVIEW</div><h2>クリップ範囲</h2></div><span id="status" class="status"></span></div>
-        <div class="wave-card"><div class="wave-labels"><span>0:00</span><span id="duration-label"></span></div><canvas id="wave" width="1200" height="180" aria-label="録音の波形。クリックで再生位置を移動、両端の線をドラッグして切り出し位置を調整"></canvas>
+        <div class="wave-card">
+          <div class="wave-tools" role="group" aria-label="波形の拡大表示">
+            <button id="zoom-in" class="secondary" aria-label="波形を拡大">＋</button><button id="zoom-out" class="secondary" aria-label="波形を縮小">−</button><output id="zoom-level">1.0×</output>
+            <button id="zoom-all" class="secondary">全体</button><button id="zoom-selection" class="secondary">選択範囲</button><button id="zoom-start" class="secondary">開始付近</button><button id="zoom-end" class="secondary">終了付近</button>
+          </div>
+          <div class="wave-labels"><span id="wave-start-label">0:00</span><span id="duration-label"></span></div><canvas id="wave" width="1200" height="180" aria-label="録音の波形。クリックで再生位置を移動、両端の線をドラッグして切り出し位置を調整"></canvas>
+          <label class="wave-pan-label">表示位置<input id="wave-pan" type="range" min="0" max="0" value="0" step="0.01" aria-label="波形の表示位置" disabled /></label>
+          <p id="wave-detail" class="wave-help" role="status"></p>
           <div class="playback"><button id="play" class="secondary" aria-pressed="false">▶ 再生</button><button id="stop" class="secondary" disabled>■ 停止</button><output id="playback-time" for="seek">0:00 / 0:00</output></div>
           <input id="seek" class="seek" type="range" min="0" max="0" step="0.01" value="0" aria-label="再生位置" />
           <p class="wave-help">波形をクリックしてシーク · 両端の緑の線をドラッグして切り出し位置を調整</p>

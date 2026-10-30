@@ -1,10 +1,12 @@
 import { parseWav, RATE } from './audio-processing.js';
+import { WaveformView } from './waveform-view.js';
 
 const $ = id => document.getElementById(id);
 const drop = $('drop'), fileInput = $('file'), workspace = $('workspace');
 let sourceFile, wav, objectUrl, analysis, envelope = [], busy = false, audioWorker, pending, sequence = 0, player;
 let playbackRequest = 0, activePreview, animationFrame, dragMode;
 let previewContext, previewSource, previewGain, measuredPreview;
+const waveView = new WaveformView(updateWaveView);
 
 function setBusy(value) {
   busy = value;
@@ -67,6 +69,17 @@ $('play').addEventListener('click', () => preview(player?.ended ? 0 : player?.cu
 $('stop').addEventListener('click', stopPlayback);
 $('seek').addEventListener('input', () => seekPlayback(Number($('seek').value)));
 $('export').addEventListener('click', exportWav);
+$('zoom-in').addEventListener('click', () => waveView.zoom(2, player?.currentTime || 0));
+$('zoom-out').addEventListener('click', () => waveView.zoom(.5, player?.currentTime || 0));
+$('zoom-all').addEventListener('click', () => waveView.set(0, waveView.duration));
+$('zoom-selection').addEventListener('click', () => {
+  const a = Number($('start').value), b = Number($('end').value);
+  if (b > a) waveView.set(a - (b - a) * .05, (b - a) * 1.1);
+});
+for (const boundary of ['start', 'end']) {
+  $(`zoom-${boundary}`).addEventListener('click', () => waveView.set(Number($(boundary).value) - 2.5, 5));
+}
+$('wave-pan').addEventListener('input', () => waveView.set(Number($('wave-pan').value), waveView.span));
 
 async function loadFile(file) {
   if (busy) return;
@@ -76,6 +89,7 @@ async function loadFile(file) {
   if (player) { player.removeAttribute('src'); player.load(); player = undefined; }
   if (objectUrl) URL.revokeObjectURL(objectUrl);
   objectUrl = undefined; sourceFile = undefined; wav = undefined; analysis = undefined; envelope = [];
+  waveView.reset();
   workspace.hidden = true; $('empty-note').hidden = false;
   $('editor').hidden = true; $('progress').hidden = true; $('preflight').hidden = true;
   try {
@@ -100,6 +114,8 @@ async function startAnalysis() {
   try {
     analysis = await processAudio('analyze');
     envelope = analysis.waveform;
+    waveView.reset(sourceFile, wav, envelope);
+    updateWaveView();
     $('start').value = (analysis.start_frame == null ? 0 : analysis.start_frame / RATE).toFixed(5);
     $('end').value = (analysis.end_frame == null ? wav.frames / RATE : analysis.end_frame / RATE).toFixed(5);
     $('status').textContent = analysis.status === 'ready' ? '自動検出 · 確認してください' : '要確認 · 手動調整してください';
@@ -111,32 +127,49 @@ async function startAnalysis() {
 function drawWave() {
   const canvas = $('wave'), ctx = canvas.getContext('2d'), w = canvas.width, h = canvas.height;
   ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#28342d'; ctx.fillRect(0, h / 2, w, 1);
-  const step = w / envelope.length;
-  envelope.forEach((peak, i) => { const height = Math.max(1, Math.min(h * .45, peak * h * .45)); ctx.fillStyle = '#65766a'; ctx.fillRect(i * step, h / 2 - height, Math.max(1, step * .72), height * 2); });
-  if (!wav) return;
-  const a = Math.max(0, Math.min(1, Number($('start').value || 0) / (wav.frames / RATE))) * w;
-  const b = Math.max(0, Math.min(1, Number($('end').value || 0) / (wav.frames / RATE))) * w;
+  waveView.draw(ctx, w, h);
+  if (!wav || !waveView.span) return;
+  const a = waveView.xAt(Number($('start').value || 0), w);
+  const b = waveView.xAt(Number($('end').value || 0), w);
   ctx.fillStyle = 'rgba(12,17,14,.61)'; ctx.fillRect(0, 0, a, h); ctx.fillRect(b, 0, w - b, h);
   ctx.fillStyle = '#d4ef83'; ctx.fillRect(a, 0, 2, h); ctx.fillRect(b - 2, 0, 2, h);
-  const position = Math.max(0, Math.min(1, (player?.currentTime || 0) / (wav.frames / RATE))) * w;
-  ctx.fillStyle = '#e5a46e'; ctx.fillRect(Math.min(w - 2, position), 0, 2, h);
-  ctx.beginPath(); ctx.moveTo(position - 6, 0); ctx.lineTo(position + 6, 0); ctx.lineTo(position, 9); ctx.fill();
+  const position = waveView.xAt(player?.currentTime || 0, w);
+  if (position >= 0 && position <= w) {
+    ctx.fillStyle = '#e5a46e'; ctx.fillRect(Math.min(w - 2, position), 0, 2, h);
+    ctx.beginPath(); ctx.moveTo(position - 6, 0); ctx.lineTo(position + 6, 0); ctx.lineTo(position, 9); ctx.fill();
+  }
+}
+function updateWaveView() {
+  const preciseClock = seconds => `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(2).padStart(5, '0')}`;
+  $('wave-start-label').textContent = preciseClock(waveView.start);
+  $('duration-label').textContent = preciseClock(waveView.end);
+  $('zoom-level').textContent = `${(waveView.duration / waveView.span || 1).toFixed(1)}×`;
+  $('zoom-in').disabled = waveView.span <= Math.min(.1, waveView.duration) + 1e-9;
+  $('zoom-out').disabled = waveView.span >= waveView.duration;
+  $('wave-pan').disabled = waveView.span >= waveView.duration;
+  $('wave-pan').max = String(Math.max(0, waveView.duration - waveView.span));
+  $('wave-pan').step = String(Math.max(1 / RATE, waveView.span / 1000));
+  $('wave-pan').value = String(waveView.start);
+  $('wave-detail').textContent = waveView.worker ? '詳細な波形を読み込み中…' : waveView.error || '';
+  drawWave();
 }
 function beginWaveDrag(event) {
   if (busy || !wav || $('editor').hidden || event.button !== 0) return;
-  const bounds = $('wave').getBoundingClientRect(), duration = wav.frames / RATE;
+  const bounds = $('wave').getBoundingClientRect();
   const x = event.clientX - bounds.left;
-  const a = Number($('start').value) / duration * bounds.width;
-  const b = Number($('end').value) / duration * bounds.width;
-  dragMode = Math.min(Math.abs(x - a), Math.abs(x - b)) <= 12
-    ? (Math.abs(x - a) <= Math.abs(x - b) ? 'start' : 'end') : 'seek';
+  const distance = boundary => {
+    const position = waveView.xAt(Number($(boundary).value), bounds.width);
+    return position >= 0 && position <= bounds.width ? Math.abs(x - position) : Infinity;
+  };
+  const a = distance('start'), b = distance('end');
+  dragMode = Math.min(a, b) <= 12 ? (a <= b ? 'start' : 'end') : 'seek';
   $('wave').setPointerCapture(event.pointerId); event.preventDefault();
   moveWavePointer(event);
 }
 function moveWavePointer(event) {
   if (busy || !wav || $('editor').hidden) return;
   const bounds = $('wave').getBoundingClientRect(), fraction = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
-  const seconds = fraction * (wav.frames / RATE);
+  const seconds = waveView.timeAt(fraction);
   if (dragMode === 'seek') seekPlayback(seconds);
   else if (dragMode) { $(dragMode).value = seconds.toFixed(5); updateRange(); }
 }

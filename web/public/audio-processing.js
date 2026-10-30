@@ -91,6 +91,28 @@ export async function analyzeAudio(file, wav, wasm, progress = () => {}) {
   return { ...report, waveform };
 }
 
+// Read only the visible interval. Preserve peaks from either channel when zooming.
+export async function readWaveform(file, wav, { startFrame, endFrame, bins = 1200 }) {
+  if (!Number.isSafeInteger(startFrame) || !Number.isSafeInteger(endFrame) || startFrame < 0
+    || endFrame > wav.frames || endFrame <= startFrame || !Number.isSafeInteger(bins) || bins < 1 || bins > 4096) {
+    throw Error('波形の表示範囲が不正です。');
+  }
+  const peaks = new Float32Array(bins), frames = endFrame - startFrame;
+  for (let start = startFrame; start < endFrame; start += CHUNK_FRAMES) {
+    const end = Math.min(endFrame, start + CHUNK_FRAMES);
+    const samples = await readSamples(file, wav, start, end);
+    for (let frame = start; frame < end; frame++) {
+      const bin = Math.min(bins - 1, Math.floor((frame - startFrame) * bins / frames));
+      for (let channel = 0; channel < wav.channels; channel++) {
+        const value = samples[(frame - start) * wav.channels + channel];
+        if (!Number.isFinite(value)) throw Error('音声に不正なサンプル値が含まれています。');
+        peaks[bin] = Math.max(peaks[bin], Math.abs(value));
+      }
+    }
+  }
+  return peaks;
+}
+
 export function wavHeader(frames, channels) {
   const bytes = new Uint8Array(56), view = new DataView(bytes.buffer);
   const text = (offset, value) => { for (let i = 0; i < value.length; i++) bytes[offset + i] = value.charCodeAt(i); };

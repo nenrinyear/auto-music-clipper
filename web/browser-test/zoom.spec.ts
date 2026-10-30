@@ -1,0 +1,63 @@
+import { test, expect } from '@playwright/test';
+import { makeWav } from '../test/fixtures';
+
+test('zooms, pans and edits boundaries using the visible time interval', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/');
+  await page.locator('#file').setInputFiles({ name: 'recording.wav', mimeType: 'audio/wav', buffer: makeWav() });
+  await page.locator('#begin-analysis').click();
+  await expect(page.locator('#editor')).toBeVisible();
+  await page.locator('#start').fill('4');
+  await page.locator('#end').fill('27');
+  await page.locator('#zoom-start').click();
+  await expect(page.locator('#wave-start-label')).toHaveText('0:01.50');
+  await expect(page.locator('#duration-label')).toHaveText('0:06.50');
+  await expect(page.locator('#zoom-level')).toHaveText('6.2×');
+  await expect(page.locator('#wave-detail')).toHaveText('');
+  const canvas = page.locator('#wave'), bounds = (await canvas.boundingBox())!;
+  // Handle at 4 s is in the center of a 1.5–6.5 s viewport.
+  await page.mouse.move(bounds.x + bounds.width * .5, bounds.y + bounds.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width * .6, bounds.y + bounds.height / 2);
+  await page.mouse.up();
+  expect(Number(await page.locator('#start').inputValue())).toBeCloseTo(4.5, 2);
+  await canvas.click({ position: { x: bounds.width * .8, y: bounds.height / 2 } });
+  await expect.poll(async () => Number(await page.locator('#seek').inputValue())).toBeCloseTo(5.5, 2);
+  await page.locator('#zoom-in').click();
+  await expect(page.locator('#zoom-level')).toHaveText('12.4×');
+  await expect(page.locator('#wave-detail')).toHaveText('');
+
+  const pan = page.getByRole('slider', { name: '波形の表示位置', exact: true });
+  await pan.focus(); await pan.press('End');
+  await expect(page.locator('#wave-start-label')).toHaveText('0:28.50');
+  await expect(page.locator('#duration-label')).toHaveText('0:31.00');
+  await expect(page.locator('#wave-detail')).toHaveText('');
+  await canvas.click({ position: { x: bounds.width / 2, y: bounds.height / 2 } });
+  await expect.poll(async () => Number(await page.locator('#seek').inputValue())).toBeCloseTo(29.75, 2);
+  await expect(page.locator('#end')).toHaveValue('27');
+  await page.locator('#zoom-out').click();
+  await expect(page.locator('#zoom-level')).toHaveText('6.2×');
+  await page.locator('#zoom-selection').click();
+  await expect(page.locator('#wave-detail')).toHaveText('');
+  await expect(page.locator('#zoom-level')).toHaveText('1.3×');
+  await page.locator('#zoom-end').click();
+  await expect(page.locator('#wave-start-label')).toHaveText('0:24.50');
+  await expect(page.locator('#duration-label')).toHaveText('0:29.50');
+  await page.locator('#zoom-all').click();
+  await expect(page.locator('#zoom-level')).toHaveText('1.0×');
+  await expect(page.locator('#wave-start-label')).toHaveText('0:00.00');
+  await expect(pan).toBeDisabled();
+  await expect(page.locator('#zoom-out')).toBeDisabled();
+  // Rapid changes leave no stale waveform or loading message behind.
+  await page.locator('#zoom-start').click();
+  await page.locator('#zoom-end').click();
+  await page.locator('#zoom-all').click();
+  await expect(page.locator('#wave-detail')).toHaveText('');
+  expect(errors).toEqual([]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#zoom-start').click();
+  await expect(page.locator('#wave-detail')).toHaveText('');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/waveform-zoom-mobile.png', fullPage: true });
+});
