@@ -104,23 +104,37 @@ export function wavHeader(frames, channels) {
   return bytes;
 }
 
-// A sink writes chunks to a temporary local file. Small-file Blob fallback is bounded.
-export async function renderAudio(file, wav, plan, wasm, progress = () => {}, sink) {
+function validatePlan(wav, plan) {
   const { startFrame, endFrame, normalize, targetDb } = plan;
   if (!Number.isSafeInteger(startFrame) || !Number.isSafeInteger(endFrame) || startFrame < 0
     || endFrame > wav.frames || endFrame <= startFrame || typeof normalize !== 'boolean'
     || !Number.isFinite(targetDb) || targetDb < -6 || targetDb > 0) throw Error('開始・終了位置とピーク上限を確認してください。');
-  const frames = endFrame - startFrame;
-  if (!sink && 56 + frames * wav.blockAlign > BLOB_LIMIT) {
-    throw Error('このブラウザでは大きなWAVの保存に対応していません。Chrome / Edge等のローカル一時保存対応ブラウザを使用するか、256 MiB以下の区間を選択してください。');
-  }
+}
+
+// Preview and export use the same peak measurement and linked-channel gain.
+export async function measureNormalization(file, wav, plan, wasm, progress = () => {}) {
+  validatePlan(wav, plan);
+  const { startFrame, endFrame, normalize, targetDb } = plan;
   let peak = 0;
   if (normalize) for (let start = startFrame; start < endFrame; start += CHUNK_FRAMES) {
     const end = Math.min(endFrame, start + CHUNK_FRAMES);
     peak = Math.max(peak, wasm.measure_chunk_peak(await readSamples(file, wav, start, end)));
-    progress({ phase: 'measure', fraction: (end - startFrame) / frames * 0.45 });
+    progress({ phase: 'measure', fraction: (end - startFrame) / (endFrame - startFrame) });
   }
   const gain = normalize && peak > 0 ? Math.min(10 ** (targetDb / 20) / peak, 10 ** (24 / 20)) : 1;
+  return { peak, gain };
+}
+
+// A sink writes chunks to a temporary local file. Small-file Blob fallback is bounded.
+export async function renderAudio(file, wav, plan, wasm, progress = () => {}, sink) {
+  validatePlan(wav, plan);
+  const { startFrame, endFrame } = plan;
+  const frames = endFrame - startFrame;
+  if (!sink && 56 + frames * wav.blockAlign > BLOB_LIMIT) {
+    throw Error('このブラウザでは大きなWAVの保存に対応していません。Chrome / Edge等のローカル一時保存対応ブラウザを使用するか、256 MiB以下の区間を選択してください。');
+  }
+  const { gain } = await measureNormalization(file, wav, plan, wasm,
+    value => progress({ ...value, fraction: value.fraction * 0.45 }));
   const pieces = [];
   const write = async bytes => { if (sink) await sink.write(bytes); else pieces.push(bytes); };
   await write(wavHeader(frames, wav.channels));

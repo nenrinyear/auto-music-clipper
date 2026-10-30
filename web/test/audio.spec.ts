@@ -1,13 +1,44 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect, vi } from 'vitest';
 import * as wasm from '../public/wasm/audio_wasm.js';
-import { parseWav, analyzeAudio, renderAudio, BLOB_LIMIT } from '../public/audio-processing.js';
+import { parseWav, analyzeAudio, renderAudio, measureNormalization, BLOB_LIMIT } from '../public/audio-processing.js';
 import { makeWav, RATE } from './fixtures';
 
 wasm.initSync({ module: readFileSync(new URL('../public/wasm/audio_wasm_bg.wasm', import.meta.url)) });
 const fileOf = (bytes: Buffer) => new File([new Uint8Array(bytes)], 'recording.wav', { type: 'audio/wav' });
 
 describe('client WASM audio processing', () => {
+  it('uses the selected range and the louder channel for preview and export gain', async () => {
+    const bytes = makeWav(1);
+    // Outside the selected range: a higher peak must not affect normalization.
+    bytes.writeFloatLE(1, 44);
+    const startFrame = 100, endFrame = 200;
+    bytes.writeFloatLE(.125, 44 + startFrame * 8);
+    bytes.writeFloatLE(-.5, 48 + startFrame * 8);
+    const file = fileOf(bytes), wav = await parseWav(file);
+    const plan = { startFrame, endFrame, normalize: true, targetDb: -1 };
+    const preview = await measureNormalization(file, wav, plan, wasm);
+    const rendered = await renderAudio(file, wav, plan, wasm);
+    expect(preview.peak).toBe(.5);
+    expect(preview.gain).toBeCloseTo(10 ** (-1 / 20) / .5, 6);
+    expect(preview.gain).toBe(rendered.gain);
+    const output = Buffer.from(await rendered.blob!.arrayBuffer());
+    expect(output.readFloatLE(56)).toBeCloseTo(.125 * preview.gain, 6);
+    expect(output.readFloatLE(60)).toBeCloseTo(-.5 * preview.gain, 6);
+    expect(output.readFloatLE(60) / output.readFloatLE(56)).toBeCloseTo(-4, 6);
+    const noRead = vi.spyOn(file, 'slice');
+    expect(await measureNormalization(file, wav, { ...plan, normalize: false }, wasm)).toMatchObject({ gain: 1 });
+    expect(noRead).not.toHaveBeenCalled();
+  });
+
+  it('keeps preview gain finite for silence and limits amplification to 24 dB', async () => {
+    const bytes = makeWav(1, 1), file = fileOf(bytes), wav = await parseWav(file);
+    const plan = { startFrame: 0, endFrame: wav.frames, normalize: true, targetDb: -1 };
+    expect(await measureNormalization(file, wav, plan, wasm)).toEqual({ peak: 0, gain: 1 });
+    bytes.writeFloatLE(.00001, 44);
+    expect((await measureNormalization(fileOf(bytes), wav, plan, wasm)).gain).toBeCloseTo(10 ** (24 / 20), 6);
+  });
+
   it.each([
     { format: 1, bits: 24, rate: 48000, channels: 2, actual: '48 kHz・24-bit 整数PCM・stereo' },
     { format: 1, bits: 32, rate: 48000, channels: 1, actual: '48 kHz・32-bit 整数PCM・mono' },

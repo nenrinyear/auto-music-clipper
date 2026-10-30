@@ -1,5 +1,5 @@
 import init, * as wasm from './wasm/audio_wasm.js';
-import { parseWav, analyzeAudio, renderAudio } from './audio-processing.js';
+import { parseWav, analyzeAudio, renderAudio, measureNormalization } from './audio-processing.js';
 
 let ready;
 let busy = false;
@@ -26,6 +26,8 @@ self.onmessage = async ({ data }) => {
     const progress = value => self.postMessage({ id, progress: value });
     if (type === 'analyze') {
       self.postMessage({ id, result: await analyzeAudio(file, wav, wasm, progress) });
+    } else if (type === 'measure') {
+      self.postMessage({ id, result: await measureNormalization(file, wav, plan, wasm, progress) });
     } else if (type === 'render') {
       try {
         directory = await exportDirectory();
