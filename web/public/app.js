@@ -4,6 +4,7 @@ const $ = id => document.getElementById(id);
 const drop = $('drop'), fileInput = $('file'), workspace = $('workspace');
 let sourceFile, wav, objectUrl, analysis, envelope = [], busy = false, audioWorker, pending, sequence = 0, player;
 let playbackRequest = 0, activePreview, animationFrame, dragMode;
+let previewContext, previewSource, previewGain, measuredPreview;
 
 function setBusy(value) {
   busy = value;
@@ -57,8 +58,8 @@ $('wave').addEventListener('pointermove', e => { if (dragMode) moveWavePointer(e
 $('wave').addEventListener('pointerup', () => { dragMode = undefined; });
 $('wave').addEventListener('pointercancel', () => { dragMode = undefined; });
 $('wave').addEventListener('lostpointercapture', () => { dragMode = undefined; });
-$('normalize').addEventListener('change', updateExportInfo);
-$('target').addEventListener('change', updateExportInfo);
+$('normalize').addEventListener('change', previewSettingsChanged);
+$('target').addEventListener('change', previewSettingsChanged);
 $('listen-start').addEventListener('click', () => preview(Number($('start').value), 'listen-start'));
 $('listen-end').addEventListener('click', () => preview(Math.max(0, Number($('end').value) - 8), 'listen-end'));
 $('play').addEventListener('click', () => preview(player?.ended ? 0 : player?.currentTime || 0, 'play'));
@@ -69,6 +70,8 @@ $('export').addEventListener('click', exportWav);
 async function loadFile(file) {
   if (busy) return;
   clearError(); setBusy(true); stopPlayback();
+  previewSource?.disconnect(); previewGain?.disconnect();
+  previewSource = undefined; previewGain = undefined; measuredPreview = undefined;
   if (player) { player.removeAttribute('src'); player.load(); player = undefined; }
   if (objectUrl) URL.revokeObjectURL(objectUrl);
   objectUrl = undefined; sourceFile = undefined; wav = undefined; analysis = undefined; envelope = [];
@@ -138,6 +141,7 @@ function moveWavePointer(event) {
 }
 function updateRange() {
   if (!wav) return;
+  stopPlayback();
   const a = Number($('start').value), b = Number($('end').value), duration = wav.frames / RATE;
   const valid = Number.isFinite(a) && Number.isFinite(b) && a >= 0 && b > a && Math.round(b * RATE) <= wav.frames && Math.round(b * RATE) > Math.round(a * RATE);
   $('export').disabled = busy || !analysis || !valid;
@@ -148,6 +152,37 @@ function updateExportInfo() {
   if (!wav) return;
   const a = Number($('start').value), b = Number($('end').value), gain = $('normalize').checked ? '自動ノーマライズ' : 'ゲイン変更なし';
   $('export-info').textContent = `${clock(Math.max(0, b - a))} · ${gain}`;
+}
+function previewSettingsChanged() {
+  stopPlayback(); updateExportInfo();
+}
+function currentPlan() {
+  return { startFrame: Math.round(Number($('start').value) * RATE), endFrame: Math.round(Number($('end').value) * RATE), targetDb: Number($('target').value), normalize: $('normalize').checked };
+}
+function connectPreview() {
+  previewContext ??= new AudioContext({ sampleRate: RATE });
+  if (!previewSource) {
+    previewGain = previewContext.createGain();
+    previewGain.gain.value = 0;
+    previewSource = previewContext.createMediaElementSource(player);
+    previewSource.connect(previewGain).connect(previewContext.destination);
+  }
+  // Resume during the click gesture, before waiting for peak measurement.
+  return previewContext.resume();
+}
+async function previewNormalization(plan) {
+  const key = JSON.stringify(plan);
+  if (measuredPreview?.key === key) return measuredPreview.gain;
+  if (!plan.normalize) return 1;
+  setBusy(true); $('progress').hidden = false;
+  $('progress-text').textContent = '試聴用のピークを測定しています…';
+  try {
+    const { gain } = await processAudio('measure', plan);
+    measuredPreview = { key, gain };
+    return gain;
+  } finally {
+    $('progress').hidden = true; setBusy(false);
+  }
 }
 function setupPlayer() {
   const audio = player = new Audio(objectUrl);
@@ -195,17 +230,25 @@ async function preview(seconds, button) {
   if (activePreview === button) { stopPlayback(); return; }
   const audio = player, request = ++playbackRequest;
   activePreview = button;
-  seekPlayback(seconds); updatePlayback();
-  try { await audio.play(); }
-  catch {
+  audio.pause(); seekPlayback(seconds); updatePlayback(); clearError();
+  try {
+    const plan = currentPlan();
+    await connectPreview();
     if (request !== playbackRequest || player !== audio) return;
-    stopPlayback(); showError('このブラウザではWAVを試聴できません。');
+    const gain = await previewNormalization(plan);
+    if (request !== playbackRequest || player !== audio) return;
+    previewGain.gain.setValueAtTime(gain, previewContext.currentTime);
+    await audio.play();
+  }
+  catch (error) {
+    if (request !== playbackRequest || player !== audio) return;
+    stopPlayback(); showError(error.message || 'このブラウザではWAVを試聴できません。');
   }
 }
 async function exportWav() {
   if (busy || !sourceFile || !wav || !analysis) return;
   stopPlayback();
-  const plan = { startFrame: Math.round(Number($('start').value) * RATE), endFrame: Math.round(Number($('end').value) * RATE), targetDb: Number($('target').value), normalize: $('normalize').checked };
+  const plan = currentPlan();
   setBusy(true); clearError(); $('export').textContent = '書き出し中…'; $('progress').hidden = false;
   $('progress-text').textContent = '端末内でWAVを書き出しています…';
   try {
