@@ -2,7 +2,6 @@ use anyhow::{bail, Context, Result};
 use audio_core::{AnalysisConfig, Analyzer, RenderPlan, Status, SAMPLE_RATE};
 use clap::{Parser, Subcommand};
 use std::{
-    f64::consts::PI,
     fs::{File, OpenOptions},
     io::BufWriter,
     path::{Path, PathBuf},
@@ -182,19 +181,8 @@ fn render_file(
     }
     let channels = spec.channels as usize;
     let peak = scan_peak(&mut reader, channels, &plan)?;
-    let target_peak = 10.0_f64.powf(target / 20.0);
-    let max_gain = 10.0_f64.powf(max_gain / 20.0);
-    let desired = if peak == 0.0 || !normalize {
-        1.0
-    } else {
-        target_peak / peak
-    };
-    let gain = if normalize {
-        desired.min(max_gain)
-    } else {
-        1.0
-    };
-    let output_peak = peak * gain;
+    let measured = plan.normalization_for_peak(peak);
+    let gain = measured.gain;
     let out_spec = hound::WavSpec {
         channels: spec.channels,
         sample_rate: SAMPLE_RATE,
@@ -217,7 +205,7 @@ fn render_file(
             output_chunk.clear();
             let batch_end = (frame + 8192).min(end);
             while frame < batch_end {
-                let fade = fade_at(frame - start, end - start, &plan);
+                let fade = plan.fade_at(frame - start);
                 for _ in 0..channels {
                     output_chunk.push(
                         (samples.next().context("truncated WAV data")?? as f64 * fade * gain)
@@ -245,7 +233,7 @@ fn render_file(
         "wrote {} frames; common gain {:.2} dB; peak {:.4}",
         end - start,
         20.0 * gain.log10(),
-        output_peak
+        measured.output_peak
     );
     Ok(())
 }
@@ -259,7 +247,7 @@ fn scan_peak(
     let mut samples = reader.samples::<f32>();
     let mut peak = 0.0_f64;
     for frame in 0..plan.end_frame - plan.start_frame {
-        let fade = fade_at(frame, plan.end_frame - plan.start_frame, plan);
+        let fade = plan.fade_at(frame);
         for channel in 0..channels {
             let sample = samples.next().context("truncated WAV data")??;
             if !sample.is_finite() {
@@ -272,20 +260,6 @@ fn scan_peak(
         }
     }
     Ok(peak)
-}
-
-fn fade_at(position: u64, length: u64, plan: &RenderPlan) -> f64 {
-    let mut fade = 1.0;
-    let fade_in = plan.fade_in_ms as u64 * 48;
-    let fade_out = plan.fade_out_ms as u64 * 48;
-    if fade_in > 1 && position < fade_in {
-        fade *= ((PI * position as f64 / (2.0 * (fade_in - 1) as f64)).sin()).powi(2);
-    }
-    if fade_out > 1 && length - position <= fade_out {
-        let i = length - position - 1;
-        fade *= ((PI * i as f64 / (2.0 * (fade_out - 1) as f64)).sin()).powi(2);
-    }
-    fade
 }
 
 fn temporary_path(path: &Path) -> PathBuf {
