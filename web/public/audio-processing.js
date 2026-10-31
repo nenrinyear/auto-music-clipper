@@ -1,3 +1,5 @@
+import { M5Equalizer } from './m5-eq.js';
+
 export const RATE = 48_000;
 const MAX_FRAMES = RATE * 60 * 120;
 const CHUNK_FRAMES = RATE * 30;
@@ -131,6 +133,21 @@ function validatePlan(wav, plan) {
   if (!Number.isSafeInteger(startFrame) || !Number.isSafeInteger(endFrame) || startFrame < 0
     || endFrame > wav.frames || endFrame <= startFrame || typeof normalize !== 'boolean'
     || !Number.isFinite(targetDb) || targetDb < -6 || targetDb > 0) throw Error('開始・終了位置とピーク上限を確認してください。');
+  if (plan.eq !== undefined && !['none', 'rode-m5'].includes(plan.eq)) throw Error('マイク補正の設定が不正です。');
+}
+
+async function* processingChunks(file, wav, plan) {
+  const equalizer = plan.eq === 'rode-m5' ? new M5Equalizer(wav.channels) : undefined;
+  // Prime from the original preceding audio, excluding this context from output
+  // and peak measurement. Both passes use identical initial filter state.
+  if (equalizer && plan.startFrame > 0) {
+    equalizer.process(await readSamples(file, wav, Math.max(0, plan.startFrame - RATE / 2), plan.startFrame));
+  }
+  for (let start = plan.startFrame; start < plan.endFrame; start += CHUNK_FRAMES) {
+    const end = Math.min(plan.endFrame, start + CHUNK_FRAMES);
+    const samples = await readSamples(file, wav, start, end);
+    yield { end, samples: equalizer ? equalizer.process(samples) : samples };
+  }
 }
 
 // Preview and export use the same peak measurement and linked-channel gain.
@@ -138,9 +155,8 @@ export async function measureNormalization(file, wav, plan, wasm, progress = () 
   validatePlan(wav, plan);
   const { startFrame, endFrame, normalize, targetDb } = plan;
   let peak = 0;
-  if (normalize) for (let start = startFrame; start < endFrame; start += CHUNK_FRAMES) {
-    const end = Math.min(endFrame, start + CHUNK_FRAMES);
-    peak = Math.max(peak, wasm.measure_chunk_peak(await readSamples(file, wav, start, end)));
+  if (normalize) for await (const { end, samples } of processingChunks(file, wav, plan)) {
+    peak = Math.max(peak, wasm.measure_chunk_peak(samples));
     progress({ phase: 'measure', fraction: (end - startFrame) / (endFrame - startFrame) });
   }
   const gain = normalize && peak > 0 ? Math.min(10 ** (targetDb / 20) / peak, 10 ** (24 / 20)) : 1;
@@ -160,9 +176,8 @@ export async function renderAudio(file, wav, plan, wasm, progress = () => {}, si
   const pieces = [];
   const write = async bytes => { if (sink) await sink.write(bytes); else pieces.push(bytes); };
   await write(wavHeader(frames, wav.channels));
-  for (let start = startFrame; start < endFrame; start += CHUNK_FRAMES) {
-    const end = Math.min(endFrame, start + CHUNK_FRAMES);
-    const output = wasm.apply_gain(await readSamples(file, wav, start, end), gain);
+  for await (const { end, samples } of processingChunks(file, wav, plan)) {
+    const output = wasm.apply_gain(samples, gain);
     const bytes = new Uint8Array(output.byteLength), view = new DataView(bytes.buffer);
     for (let i = 0; i < output.length; i++) view.setFloat32(i * 4, output[i], true);
     await write(bytes);

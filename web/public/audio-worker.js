@@ -28,7 +28,7 @@ self.onmessage = async ({ data }) => {
       self.postMessage({ id, result: await analyzeAudio(file, wav, wasm, progress) });
     } else if (type === 'measure') {
       self.postMessage({ id, result: await measureNormalization(file, wav, plan, wasm, progress) });
-    } else if (type === 'render') {
+    } else if (type === 'render' || type === 'preview') {
       try {
         directory = await exportDirectory();
         if (directory) {
