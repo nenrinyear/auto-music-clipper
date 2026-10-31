@@ -3,58 +3,100 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#111714" />
+  <meta name="theme-color" content="#006e3c" />
   <title>余韻 — 演奏録音クリッパー</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/style.css" />
   <link rel="stylesheet" href="/worker-flow.css" />
 </head>
 <body>
-  <header class="topbar"><a class="brand" href="/"><span class="brand-mark">余</span><span>余韻<span class="brand-sub"> / YO-IN</span></span></a><span class="privacy"><i></i> 録音はこの端末内で処理します</span></header>
-  <main>
-    <section class="intro"><div class="eyebrow">RECORDING EDITOR <span>01 / 01</span></div><h1>演奏のはじまりと、<br/><em>余韻の終わりを。</em></h1><p>録音を読み込むと、演奏の開始と終わりを自動で見つけます。<br class="desktop"/>境界を確認したら、左右のバランスを保って音量を整えましょう。</p></section>
-    <section id="drop" class="dropzone" tabindex="0" role="button" aria-label="WAVファイルを選択"><div class="upload-icon">↑</div><div><strong>録音ファイルをドロップ</strong><span>または <u>ファイルを選択</u></span></div><small>48 kHz · 32-bit float · mono / stereo WAV</small><input id="file" type="file" accept=".wav,audio/wav" hidden /></section>
-    <div id="error" class="error" hidden></div>
-    <section id="workspace" hidden>
-      <div class="file-row"><div class="file-icon">WAV</div><div class="file-meta"><strong id="filename"></strong><span id="fileinfo"></span></div><button id="replace" class="text-button">ファイルを変更</button></div>
-      <div id="preflight" class="preflight" hidden><div><strong>録音をこの端末内で解析</strong><span>音声は送信されません。書き出し時に端末内の一時保存領域を使う場合があります。</span></div><button id="begin-analysis" class="primary">解析を開始 <span>→</span></button></div>
-      <div id="progress" class="progress" hidden><span class="spinner"></span><span id="progress-text">WASMを準備しています…</span></div>
+  <a class="skip-link" href="#main">本文へ移動</a>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="余韻 ホーム"><span class="brand-mark" aria-hidden="true">余</span><span>余韻<span class="brand-sub"> / YO-IN</span></span></a>
+    <span class="privacy">録音はこの端末内で処理します</span>
+  </header>
+  <main id="main" tabindex="-1">
+    <section class="intro" aria-labelledby="page-title">
+      <p class="eyebrow">演奏録音クリッパー</p>
+      <h1 id="page-title">演奏のはじまりと、余韻の終わりを。</h1>
+      <p>録音から演奏の開始と終わりを自動で見つけます。範囲を確認し、左右のバランスを保って音量を整えて、WAVで保存できます。</p>
+      <ol class="steps" aria-label="編集の流れ">
+        <li><span>1</span>読み込み</li><li><span>2</span>範囲確認</li><li><span>3</span>音量調整</li><li><span>4</span>書き出し</li>
+      </ol>
+    </section>
+    <section class="upload-section" aria-labelledby="upload-heading">
+      <div class="section-head"><h2 id="upload-heading"><span class="step-number" aria-hidden="true">1</span>録音を読み込む</h2></div>
+      <div id="drop" class="dropzone">
+        <p>ここに録音ファイルをドロップ<br />または、ボタンから選択してください。</p>
+        <button id="choose-file" class="primary" type="button" aria-describedby="file-requirements">WAVファイルを選択</button>
+        <input id="file" type="file" accept=".wav,audio/wav" aria-label="録音ファイル" hidden />
+      </div>
+      <p id="file-requirements" class="file-requirements">対応形式：WAV・48 kHz・32-bit float・モノラル／ステレオ。長さは120分まで。録音はアップロードされません。</p>
+    </section>
+    <div id="error" class="error" role="alert" aria-atomic="true" hidden></div>
+    <section id="workspace" aria-label="録音の編集" hidden>
+      <div class="file-row">
+        <div class="file-icon" aria-hidden="true">WAV</div>
+        <div class="file-meta"><strong id="filename"></strong><span id="fileinfo"></span></div>
+        <button id="replace" class="text-button" type="button">ファイルを変更</button>
+      </div>
+      <div id="preflight" class="preflight" hidden>
+        <div><strong>録音をこの端末内で解析</strong><span>音声は送信されません。書き出し時に端末内の一時保存領域を使う場合があります。</span></div>
+        <button id="begin-analysis" class="primary" type="button">解析を開始 <span aria-hidden="true">→</span></button>
+      </div>
+      <div id="progress" class="progress" role="status" aria-live="polite" aria-atomic="true" hidden><span class="spinner" aria-hidden="true"></span><span id="progress-text">解析を準備しています…</span></div>
       <div id="editor" hidden>
-        <div class="section-head"><div><div class="eyebrow">TRIM PREVIEW</div><h2>クリップ範囲</h2></div><span id="status" class="status"></span></div>
-        <div class="wave-card">
-          <div class="wave-tools" role="group" aria-label="波形の拡大表示">
-            <button id="zoom-in" class="secondary" aria-label="波形を拡大">＋</button><button id="zoom-out" class="secondary" aria-label="波形を縮小">−</button><output id="zoom-level">1.0×</output>
-            <button id="zoom-all" class="secondary">全体</button><button id="zoom-selection" class="secondary">選択範囲</button><button id="zoom-start" class="secondary">開始付近</button><button id="zoom-end" class="secondary">終了付近</button>
+        <section class="editor-section" aria-labelledby="trim-heading">
+          <div class="section-head"><h2 id="trim-heading" tabindex="-1"><span class="step-number" aria-hidden="true">2</span>クリップ範囲を確認する</h2><span id="status" class="status"></span></div>
+          <p>自動検出は目安です。開始と終了を試聴し、残したい範囲に調整してください。</p>
+          <div class="wave-card">
+            <div class="wave-tools" role="group" aria-label="波形の拡大表示">
+              <button id="zoom-in" class="secondary" aria-label="波形を拡大">＋</button><button id="zoom-out" class="secondary" aria-label="波形を縮小">−</button><output id="zoom-level" aria-label="波形の拡大率">1.0×</output>
+              <button id="zoom-all" class="secondary">全体</button><button id="zoom-selection" class="secondary">選択範囲</button><button id="zoom-start" class="secondary">開始付近</button><button id="zoom-end" class="secondary">終了付近</button>
+            </div>
+            <div class="wave-visual">
+              <div class="wave-labels"><span id="wave-start-label">0:00</span><span id="duration-label"></span></div>
+              <canvas id="wave" width="1200" height="240" role="img" aria-label="録音の波形と保存範囲" aria-describedby="wave-instructions">開始・終了は下の数値入力、再生位置はスライダーで変更できます。</canvas>
+              <div class="wave-legend" aria-label="波形の凡例"><span class="legend-keep">明るい区間：保存</span><span class="legend-cut">暗い区間：カット</span><span class="legend-detected">点線：検出候補・自動境界</span><span class="legend-selected">緑の実線：保存境界</span></div>
+              <div id="detection-markers" class="detection-markers" role="group" aria-label="自動検出の候補"></div>
+            </div>
+            <label class="wave-pan-label">表示位置<input id="wave-pan" type="range" min="0" max="0" value="0" step="0.01" aria-label="波形の表示位置" disabled /></label>
+            <p id="wave-detail" class="wave-help" role="status"></p>
+            <p id="break-info" class="wave-help"></p>
+            <div class="playback"><button id="play" class="secondary" aria-pressed="false">▶ 再生</button><button id="stop" class="secondary" disabled>■ 停止</button><output id="playback-time" for="seek" aria-live="off">0:00 / 0:00</output></div>
+            <input id="seek" class="seek" type="range" min="0" max="0" step="0.01" value="0" aria-label="再生位置" />
+            <p id="wave-instructions" class="wave-help">波形のクリックで再生位置を移動、緑の線のドラッグで範囲を調整できます。キーボードでは再生位置スライダーと、下の開始・終了の数値入力を使ってください。停止ボタンは再生中に使えます。</p>
+            <div class="range-inputs"><label>開始（秒）<input id="start" type="number" min="0" step="0.01" /></label><label>終了（秒）<input id="end" type="number" min="0" step="0.01" /></label><span id="selection-length"></span></div>
           </div>
-          <div class="wave-labels"><span id="wave-start-label">0:00</span><span id="duration-label"></span></div><canvas id="wave" width="1200" height="180" aria-label="録音の波形。クリックで再生位置を移動、両端の線をドラッグして切り出し位置を調整"></canvas>
-          <label class="wave-pan-label">表示位置<input id="wave-pan" type="range" min="0" max="0" value="0" step="0.01" aria-label="波形の表示位置" disabled /></label>
-          <p id="wave-detail" class="wave-help" role="status"></p>
-          <div class="wave-legend" aria-label="波形の凡例"><span class="legend-keep">明るい区間：保存</span><span class="legend-cut">暗い区間：カット</span><span class="legend-detected">点線：検出候補・自動境界</span><span class="legend-selected">緑の実線：保存境界</span></div>
-          <div id="detection-markers" class="detection-markers" role="group" aria-label="自動検出の候補"></div>
-          <p id="break-info" class="wave-help"></p>
-          <div class="playback"><button id="play" class="secondary" aria-pressed="false">▶ 再生</button><button id="stop" class="secondary" disabled>■ 停止</button><output id="playback-time" for="seek">0:00 / 0:00</output></div>
-          <input id="seek" class="seek" type="range" min="0" max="0" step="0.01" value="0" aria-label="再生位置" />
-          <p class="wave-help">波形をクリックしてシーク · 両端の緑の線をドラッグして切り出し位置を調整</p>
-          <div class="range-inputs"><label>開始 <input id="start" type="number" min="0" step="0.01" /></label><label>終了 <input id="end" type="number" min="0" step="0.01" /></label><span id="selection-length"></span></div></div>
-        <div class="trim-summary"><p id="trim-state" class="wave-help" role="status"></p><button id="reset-trim" class="secondary" disabled>自動検出の範囲に戻す</button></div>
-        <div class="controls"><button id="listen-start" class="secondary" aria-pressed="false">▶ 冒頭を試聴</button><button id="listen-end" class="secondary" aria-pressed="false">▶ 終わりを試聴</button><label class="gain-control">音量を均等に <input id="normalize" type="checkbox" checked /><span class="switch"></span></label></div>
-        <div class="gain-row"><div><strong>ステレオバランスを維持</strong><span>左右に同じゲインを適用します</span></div><label class="gain-label">ピーク上限 <select id="target"><option value="-1">−1 dBFS</option><option value="-0.5">−0.5 dBFS</option><option value="0">0 dBFS</option></select></label></div>
-        <section class="eq-panel" aria-label="マイクの周波数補正">
-          <label><input id="m5-eq" type="checkbox" /> RØDE M5で録音した音声を補正する</label>
-          <p>左右に同じ補正を適用します。ノーマライズ有効時は選択範囲のEQ後のピークを使い、試聴にも反映します。</p>
-          <details><summary>補正カーブと出典</summary>
-            <svg id="eq-curve" viewBox="0 0 520 90" role="img" aria-label="M5補正カーブ。20 Hzから20 kHz、中心線0 dB、上下3 dB"><path d="M10 15H510 M10 45H510 M10 75H510" fill="none" stroke="#46543e" /></svg>
-            <div class="eq-axis"><span>20 Hz</span><span>1 kHz</span><span>20 kHz</span></div>
-            <p>公式の公称特性を1 kHz基準で平滑化して逆補正。設計上限±3 dB、低域・高域の端では補正を弱めています。個々のマイクや部屋の音響を測定した補正ではありません。</p>
-            <a href="https://edge.rode.com/pdf/products/48/M5_Matched_pair_DS_V02.pdf" target="_blank" rel="noopener">RØDE公式 M5データシート（V02・2ページ）</a>
-          </details>
+          <div class="trim-summary"><p id="trim-state" class="wave-help" role="status"></p><button id="reset-trim" class="secondary" aria-describedby="reset-help" disabled>自動検出の範囲に戻す</button><p id="reset-help" class="wave-help">範囲を手動で変更すると、自動検出の範囲に戻せます。</p></div>
+          <div class="controls"><button id="listen-start" class="secondary" aria-pressed="false">▶ 冒頭を試聴</button><button id="listen-end" class="secondary" aria-pressed="false">▶ 終わりを試聴</button></div>
         </section>
-        <p id="normalization-info" class="wave-help" role="status">選択範囲のピークで再計算します（試聴・書き出し時）</p>
-        <div class="export-row"><div><span class="export-title">仕上がり</span><span id="export-info">境界を確認してください</span></div><button id="export" class="primary" disabled>WAVを書き出す <span>↓</span></button></div>
+        <section class="editor-section" aria-labelledby="audio-heading">
+          <div class="section-head"><h2 id="audio-heading"><span class="step-number" aria-hidden="true">3</span>音量・補正を設定する</h2></div>
+          <label class="gain-control"><input id="normalize" type="checkbox" checked aria-describedby="normalize-help" />音量を均等にする（ノーマライズ）</label>
+          <div class="gain-row"><div><strong>ステレオバランスを維持</strong><span id="normalize-help">左右に同じゲインを適用します。</span></div><label class="gain-label">ピーク上限<select id="target"><option value="-1">−1 dBFS</option><option value="-0.5">−0.5 dBFS</option><option value="0">0 dBFS</option></select></label></div>
+          <div class="eq-panel">
+            <label><input id="m5-eq" type="checkbox" aria-describedby="eq-help" />RØDE M5で録音した音声を補正する</label>
+            <p id="eq-help">左右に同じ補正を適用します。ノーマライズ有効時は選択範囲のEQ後のピークを使い、試聴にも反映します。</p>
+            <details><summary>補正カーブと出典</summary>
+              <svg id="eq-curve" viewBox="0 0 520 90" role="img" aria-label="M5補正カーブ。20 Hzから20 kHz、中心線0 dB、上下3 dB"><path d="M10 15H510 M10 45H510 M10 75H510" fill="none" stroke="#788a80" /></svg>
+              <div class="eq-axis"><span>20 Hz</span><span>1 kHz</span><span>20 kHz</span></div>
+              <p>公式の公称特性を1 kHz基準で平滑化して逆補正。設計上限±3 dB、低域・高域の端では補正を弱めています。個々のマイクや部屋の音響を測定した補正ではありません。</p>
+              <a href="https://edge.rode.com/pdf/products/48/M5_Matched_pair_DS_V02.pdf" target="_blank" rel="noopener">RØDE公式 M5データシート（V02・2ページ、新しいタブで開きます）</a>
+            </details>
+          </div>
+          <p id="normalization-info" class="wave-help" role="status">選択範囲のピークで再計算します（試聴・書き出し時）</p>
+        </section>
+        <section class="editor-section" aria-labelledby="export-heading">
+          <div class="section-head"><h2 id="export-heading"><span class="step-number" aria-hidden="true">4</span>WAVを書き出す</h2></div>
+          <div class="export-row"><div><span class="export-title">仕上がり</span><span id="export-info">境界を確認してください</span></div><button id="export" class="primary" disabled>WAVを書き出す <span aria-hidden="true">↓</span></button></div>
+          <p id="export-status" class="wave-help" role="status" aria-atomic="true"></p>
+        </section>
       </div>
     </section>
-    <section id="empty-note" class="note"><span>i</span><p>解析結果は目安です。残響や拍手の入り方に合わせて、開始・終了を調整してから書き出してください。</p></section>
+    <aside id="empty-note" class="note" aria-label="解析について"><p><strong>解析結果は目安です。</strong>残響や拍手の入り方に合わせて、開始・終了を調整してから書き出してください。</p></aside>
   </main>
   <footer><span>余韻 — 演奏録音を、気持ちよく。</span><span>音声のアップロード不要</span></footer>
   <script type="module" src="/app.js"></script>
-</body></html>
+</body>
+</html>

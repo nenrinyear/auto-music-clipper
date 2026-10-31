@@ -13,8 +13,7 @@ const waveView = new WaveformView(updateWaveView);
 
 function setBusy(value) {
   busy = value;
-  for (const id of ['file', 'replace', 'begin-analysis', 'start', 'end', 'normalize', 'target', 'm5-eq', 'listen-start', 'listen-end', 'play', 'seek']) $(id).disabled = value;
-  drop.setAttribute('aria-disabled', String(value));
+  for (const id of ['file', 'choose-file', 'replace', 'begin-analysis', 'start', 'end', 'normalize', 'target', 'm5-eq', 'listen-start', 'listen-end', 'play', 'seek']) $(id).disabled = value;
   $('export').disabled = value || !analysis;
   $('play').disabled = value || !!activePreview;
 }
@@ -50,8 +49,7 @@ function processAudio(type, plan) {
   });
 }
 
-drop.addEventListener('click', () => { if (!busy) fileInput.click(); });
-drop.addEventListener('keydown', e => { if (!busy && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); fileInput.click(); } });
+$('choose-file').addEventListener('click', () => { if (!busy) fileInput.click(); });
 drop.addEventListener('dragover', e => { e.preventDefault(); if (!busy) drop.classList.add('drag'); });
 drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
 drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('drag'); if (!busy && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
@@ -101,7 +99,7 @@ drawEqCurve();
 
 async function loadFile(file) {
   if (busy) return;
-  clearError(); setBusy(true); stopPlayback();
+  clearError(); $('export-status').textContent = ''; setBusy(true); stopPlayback();
   if (preparedPreview) URL.revokeObjectURL(preparedPreview.url);
   preparedPreview = undefined; playbackOffset = 0; processedFrames = undefined;
   previewSource?.disconnect(); previewGain?.disconnect();
@@ -123,7 +121,7 @@ async function loadFile(file) {
     setupPlayer();
     workspace.hidden = false; $('empty-note').hidden = true; $('preflight').hidden = false;
   } catch (error) { showError(error.message || String(error)); }
-  finally { setBusy(false); }
+  finally { setBusy(false); if (sourceFile) $('begin-analysis').focus(); }
 }
 
 async function startAnalysis() {
@@ -142,7 +140,11 @@ async function startAnalysis() {
     $('status').textContent = analysis.status === 'ready' ? '自動検出 · 確認してください' : '要確認 · 手動調整してください';
     $('editor').hidden = false;
   } catch (error) { $('preflight').hidden = false; showError(error.message || String(error)); }
-  finally { $('progress').hidden = true; setBusy(false); if (analysis) updateRange(); }
+  finally {
+    $('progress').hidden = true; setBusy(false);
+    if (analysis) { updateRange(); $('trim-heading').focus(); }
+    else $('begin-analysis').focus();
+  }
 }
 
 function drawWave() {
@@ -366,7 +368,7 @@ async function exportWav() {
   if (busy || !sourceFile || !wav || !analysis) return;
   stopPlayback();
   const plan = currentPlan();
-  setBusy(true); clearError(); $('export').textContent = '書き出し中…'; $('progress').hidden = false;
+  setBusy(true); clearError(); $('export-status').textContent = ''; $('export').textContent = '書き出し中…'; $('progress').hidden = false;
   $('progress-text').textContent = '端末内でWAVを書き出しています…';
   try {
     const result = await processAudio('render', plan);
@@ -374,6 +376,7 @@ async function exportWav() {
     const link = document.createElement('a'); link.href = url;
     link.download = sourceFile.name.replace(/\.wav$/i, '') + (plan.eq === 'rode-m5' ? '_clip_m5.wav' : '_clip.wav');
     document.body.append(link); link.click(); link.remove();
+    $('export-status').textContent = `${link.download} のダウンロードを開始しました。保存先はブラウザの設定に従います。`;
     // Revoking the URL releases our reference without deleting a file a download may still be reading.
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   } catch (error) { showError(error.message || String(error)); }
