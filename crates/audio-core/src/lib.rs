@@ -799,6 +799,61 @@ mod tests {
     }
 
     #[test]
+    fn fades_affect_peak_measurement_and_output_identically() {
+        let plan = RenderPlan {
+            start_frame: 2,
+            end_frame: 194,
+            normalize: true,
+            target_peak_dbfs: -1.0,
+            max_gain_db: 18.0,
+            fade_in_ms: 1,
+            fade_out_ms: 2,
+        };
+        let mut samples = vec![10.0; 196];
+        samples[2..194].fill(0.25);
+        // Large boundary samples are silenced by the fades and must not set gain.
+        samples[2] = 4.0;
+        samples[193] = -4.0;
+        let measured = measure_peak(&samples, 1, &plan).unwrap();
+        assert_eq!(measured.input_peak, 0.25);
+        let output = render(&samples, 1, &plan, measured.gain).unwrap();
+        let target = 10.0_f64.powf(-1.0 / 20.0);
+        assert_eq!(output.len(), 192);
+        for (position, sample) in output.iter().enumerate() {
+            let expected = match position {
+                0 | 191 => 0.0,
+                1..=46 => target * (PI * position as f64 / 94.0).sin().powi(2),
+                97..=190 => target * (PI * (191 - position) as f64 / 190.0).sin().powi(2),
+                _ => target,
+            };
+            assert!((*sample as f64 - expected).abs() < 1e-7);
+        }
+    }
+
+    #[test]
+    fn normalization_caps_amplification_and_can_be_disabled() {
+        let mut plan = RenderPlan {
+            start_frame: 0,
+            end_frame: 2,
+            normalize: true,
+            target_peak_dbfs: -1.0,
+            max_gain_db: 18.0,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+        };
+        let samples = [0.001, -0.002];
+        let measured = measure_peak(&samples, 1, &plan).unwrap();
+        assert_eq!(measured.gain, 10.0_f64.powf(18.0 / 20.0));
+        assert!(measured.gain_limited);
+        assert_eq!(measured.output_peak, measured.input_peak * measured.gain);
+        plan.normalize = false;
+        let measured = measure_peak(&samples, 1, &plan).unwrap();
+        assert_eq!(measured.gain, 1.0);
+        assert!(!measured.gain_limited);
+        assert_eq!(render(&samples, 1, &plan, measured.gain).unwrap(), samples);
+    }
+
+    #[test]
     fn silence_is_not_normalized_to_infinity() {
         let plan = RenderPlan {
             start_frame: 0,
