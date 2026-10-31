@@ -1,17 +1,19 @@
 import { parseWav, RATE } from './audio-processing.js';
 import { WaveformView } from './waveform-view.js';
 import { detectionMarkers, selectionFrames, frameSeconds, frameTime, drawTrimOverlay } from './trim-view.js';
+import { M5_PROFILE } from './m5-profile.js';
 
 const $ = id => document.getElementById(id);
 const drop = $('drop'), fileInput = $('file'), workspace = $('workspace');
 let sourceFile, wav, objectUrl, analysis, envelope = [], busy = false, audioWorker, pending, sequence = 0, player;
 let playbackRequest = 0, activePreview, animationFrame, dragMode;
 let previewContext, previewSource, previewGain, measuredPreview;
+let preparedPreview, playbackOffset = 0, processedFrames;
 const waveView = new WaveformView(updateWaveView);
 
 function setBusy(value) {
   busy = value;
-  for (const id of ['file', 'replace', 'begin-analysis', 'start', 'end', 'normalize', 'target', 'listen-start', 'listen-end', 'play', 'seek']) $(id).disabled = value;
+  for (const id of ['file', 'replace', 'begin-analysis', 'start', 'end', 'normalize', 'target', 'm5-eq', 'listen-start', 'listen-end', 'play', 'seek']) $(id).disabled = value;
   drop.setAttribute('aria-disabled', String(value));
   $('export').disabled = value || !analysis;
   $('play').disabled = value || !!activePreview;
@@ -23,6 +25,7 @@ function getWorker() {
     if (!pending || pending.id !== data.id) return;
     if (data.progress) {
       const phases = { analyze: '端末内で解析中', measure: 'ピークを測定中', render: 'WAVを書き出し中' };
+      if (pending.type === 'preview') phases.render = 'EQを反映した試聴音声を準備中';
       $('progress-text').textContent = `${phases[data.progress.phase]}… ${Math.floor(data.progress.fraction * 100)}%`;
       return;
     }
@@ -41,7 +44,7 @@ function processAudio(type, plan) {
   return new Promise((resolve, reject) => {
     try {
       const worker = getWorker(), id = ++sequence;
-      pending = { id, resolve, reject };
+      pending = { id, type, resolve, reject };
       worker.postMessage({ id, type, file: sourceFile, plan });
     } catch (error) { pending = undefined; reject(error); }
   });
@@ -75,14 +78,15 @@ $('wave').addEventListener('pointercancel', () => { dragMode = undefined; });
 $('wave').addEventListener('lostpointercapture', () => { dragMode = undefined; });
 $('normalize').addEventListener('change', previewSettingsChanged);
 $('target').addEventListener('change', previewSettingsChanged);
+$('m5-eq').addEventListener('change', previewSettingsChanged);
 $('listen-start').addEventListener('click', () => preview(Number($('start').value), 'listen-start'));
 $('listen-end').addEventListener('click', () => preview(Math.max(0, Number($('end').value) - 8), 'listen-end'));
-$('play').addEventListener('click', () => preview(player?.ended ? 0 : player?.currentTime || 0, 'play'));
+$('play').addEventListener('click', () => preview(player?.ended ? 0 : playbackTime(), 'play'));
 $('stop').addEventListener('click', stopPlayback);
 $('seek').addEventListener('input', () => seekPlayback(Number($('seek').value)));
 $('export').addEventListener('click', exportWav);
-$('zoom-in').addEventListener('click', () => waveView.zoom(2, player?.currentTime || 0));
-$('zoom-out').addEventListener('click', () => waveView.zoom(.5, player?.currentTime || 0));
+$('zoom-in').addEventListener('click', () => waveView.zoom(2, playbackTime()));
+$('zoom-out').addEventListener('click', () => waveView.zoom(.5, playbackTime()));
 $('zoom-all').addEventListener('click', () => waveView.set(0, waveView.duration));
 $('zoom-selection').addEventListener('click', () => {
   const a = Number($('start').value), b = Number($('end').value);
@@ -93,10 +97,13 @@ for (const boundary of ['start', 'end']) {
 }
 $('wave-pan').addEventListener('input', () => waveView.set(Number($('wave-pan').value), waveView.span));
 new ResizeObserver(drawWave).observe($('wave'));
+drawEqCurve();
 
 async function loadFile(file) {
   if (busy) return;
   clearError(); setBusy(true); stopPlayback();
+  if (preparedPreview) URL.revokeObjectURL(preparedPreview.url);
+  preparedPreview = undefined; playbackOffset = 0; processedFrames = undefined;
   previewSource?.disconnect(); previewGain?.disconnect();
   previewSource = undefined; previewGain = undefined; measuredPreview = undefined;
   if (player) { player.removeAttribute('src'); player.load(); player = undefined; }
@@ -144,7 +151,7 @@ function drawWave() {
   waveView.draw(ctx, w, h);
   if (!wav || !waveView.span) return;
   drawTrimOverlay(ctx, waveView, w, h, analysis, selectionFrames($('start').value, $('end').value), { x: w / (canvas.clientWidth || w), y: h / (canvas.clientHeight || h) });
-  const position = waveView.xAt(player?.currentTime || 0, w);
+  const position = waveView.xAt(playbackTime(), w);
   if (position >= 0 && position <= w) {
     ctx.fillStyle = '#e5a46e'; ctx.fillRect(Math.min(w - 2, position), 0, 2, h);
     ctx.beginPath(); ctx.moveTo(position - 6, 0); ctx.lineTo(position + 6, 0); ctx.lineTo(position, 9); ctx.fill();
@@ -203,6 +210,7 @@ function moveWavePointer(event) {
 function updateRange() {
   if (!wav) return;
   stopPlayback();
+  restoreOriginalPreview();
   const { startFrame, endFrame } = currentPlan();
   const valid = Number.isSafeInteger(startFrame) && Number.isSafeInteger(endFrame) && startFrame >= 0 && endFrame <= wav.frames && endFrame > startFrame;
   $('export').disabled = busy || !analysis || !valid;
@@ -216,17 +224,45 @@ function updateRange() {
 function updateExportInfo() {
   if (!wav) return;
   const a = Number($('start').value), b = Number($('end').value), gain = $('normalize').checked ? '自動ノーマライズ' : 'ゲイン変更なし';
-  $('export-info').textContent = `${clock(Math.max(0, b - a))} · ${gain}`;
+  $('export-info').textContent = `${clock(Math.max(0, b - a))} · ${gain}${$('m5-eq').checked ? ' · M5補正' : ''}`;
   const measured = measuredPreview?.key === JSON.stringify(currentPlan());
-  $('normalization-info').textContent = !$('normalize').checked ? 'ノーマライズなし（原音の音量）'
+  $('normalization-info').textContent = !$('normalize').checked ? ($('m5-eq').checked ? 'ノーマライズなし（M5補正のみ）' : 'ノーマライズなし（原音の音量）')
     : measured ? `選択範囲で再計算済み · ${20 * Math.log10(measuredPreview.gain) >= 0 ? '+' : ''}${(20 * Math.log10(measuredPreview.gain)).toFixed(1)} dB（左右共通）`
     : '選択範囲のピークで再計算します（試聴・書き出し時）';
 }
 function previewSettingsChanged() {
-  stopPlayback(); updateExportInfo();
+  stopPlayback(); restoreOriginalPreview(); updateExportInfo();
 }
 function currentPlan() {
-  return { ...selectionFrames($('start').value, $('end').value), targetDb: Number($('target').value), normalize: $('normalize').checked };
+  return { ...selectionFrames($('start').value, $('end').value), targetDb: Number($('target').value), normalize: $('normalize').checked, eq: $('m5-eq').checked ? 'rode-m5' : 'none' };
+}
+function playbackTime() { return (player?.currentTime || 0) + playbackOffset; }
+function restoreOriginalPreview() {
+  if (processedFrames === undefined || !player || !objectUrl) return;
+  const position = playbackTime();
+  player.src = objectUrl; playbackOffset = 0; processedFrames = undefined;
+  player.currentTime = position;
+}
+async function prepareEqPreview(plan) {
+  const key = JSON.stringify(plan);
+  if (preparedPreview?.key === key) return preparedPreview;
+  setBusy(true); $('progress').hidden = false;
+  $('progress-text').textContent = 'EQを反映した試聴音声を準備しています…';
+  try {
+    const result = await processAudio('preview', plan);
+    if (preparedPreview) URL.revokeObjectURL(preparedPreview.url);
+    preparedPreview = { key, url: URL.createObjectURL(result.blob), startFrame: plan.startFrame, frames: result.frames };
+    measuredPreview = { key, gain: result.gain };
+    updateExportInfo();
+    return preparedPreview;
+  } finally { $('progress').hidden = true; setBusy(false); }
+}
+function drawEqCurve() {
+  const svg = $('eq-curve'), ns = 'http://www.w3.org/2000/svg';
+  const line = document.createElementNS(ns, 'polyline');
+  line.setAttribute('points', M5_PROFILE.design.curve.map(([frequency, , db]) => `${10 + Math.log10(frequency / 20) / 3 * 500},${45 - db * 10}`).join(' '));
+  line.setAttribute('fill', 'none'); line.setAttribute('stroke', '#d4ef83'); line.setAttribute('stroke-width', '2');
+  svg.append(line);
 }
 function connectPreview() {
   previewContext ??= new AudioContext({ sampleRate: RATE });
@@ -273,7 +309,7 @@ function setupPlayer() {
 }
 function updatePlayback() {
   cancelAnimationFrame(animationFrame);
-  const seconds = player?.currentTime || 0;
+  const seconds = playbackTime();
   $('seek').value = String(seconds);
   $('playback-time').textContent = `${clock(seconds)} / ${clock(wav ? wav.frames / RATE : 0)}`;
   const labels = { 'listen-start': '▶ 冒頭を試聴', 'listen-end': '▶ 終わりを試聴', play: '▶ 再生' };
@@ -293,7 +329,8 @@ function stopPlayback() {
 }
 function seekPlayback(seconds) {
   if (!player || !wav || busy) return;
-  player.currentTime = Math.max(0, Math.min(wav.frames / RATE, seconds));
+  const duration = processedFrames === undefined ? wav.frames / RATE : processedFrames / RATE;
+  player.currentTime = Math.max(0, Math.min(duration, seconds - playbackOffset));
   updatePlayback();
 }
 async function preview(seconds, button) {
@@ -305,8 +342,18 @@ async function preview(seconds, button) {
     const plan = currentPlan();
     await connectPreview();
     if (request !== playbackRequest || player !== audio) return;
-    const gain = await previewNormalization(plan);
+    let gain;
+    if (plan.eq === 'rode-m5') {
+      const prepared = await prepareEqPreview(plan);
+      if (request !== playbackRequest || player !== audio) return;
+      if (audio.src !== prepared.url) audio.src = prepared.url;
+      playbackOffset = prepared.startFrame / RATE; processedFrames = prepared.frames;
+      gain = 1; // EQ and normalization are baked using the export pipeline.
+    } else {
+      restoreOriginalPreview(); gain = await previewNormalization(plan);
+    }
     if (request !== playbackRequest || player !== audio) return;
+    seekPlayback(seconds);
     previewGain.gain.setValueAtTime(gain, previewContext.currentTime);
     await audio.play();
   }
@@ -325,7 +372,7 @@ async function exportWav() {
     const result = await processAudio('render', plan);
     const url = URL.createObjectURL(result.blob);
     const link = document.createElement('a'); link.href = url;
-    link.download = sourceFile.name.replace(/\.wav$/i, '') + '_clip.wav';
+    link.download = sourceFile.name.replace(/\.wav$/i, '') + (plan.eq === 'rode-m5' ? '_clip_m5.wav' : '_clip.wav');
     document.body.append(link); link.click(); link.remove();
     // Revoking the URL releases our reference without deleting a file a download may still be reading.
     setTimeout(() => URL.revokeObjectURL(url), 60_000);

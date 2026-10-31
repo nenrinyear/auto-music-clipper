@@ -39,6 +39,16 @@
         <div class="trim-summary"><p id="trim-state" class="wave-help" role="status"></p><button id="reset-trim" class="secondary" disabled>自動検出の範囲に戻す</button></div>
         <div class="controls"><button id="listen-start" class="secondary" aria-pressed="false">▶ 冒頭を試聴</button><button id="listen-end" class="secondary" aria-pressed="false">▶ 終わりを試聴</button><label class="gain-control">音量を均等に <input id="normalize" type="checkbox" checked /><span class="switch"></span></label></div>
         <div class="gain-row"><div><strong>ステレオバランスを維持</strong><span>左右に同じゲインを適用します</span></div><label class="gain-label">ピーク上限 <select id="target"><option value="-1">−1 dBFS</option><option value="-0.5">−0.5 dBFS</option><option value="0">0 dBFS</option></select></label></div>
+        <section class="eq-panel" aria-label="マイクの周波数補正">
+          <label><input id="m5-eq" type="checkbox" /> RØDE M5で録音した音声を補正する</label>
+          <p>左右に同じ補正を適用します。ノーマライズ有効時は選択範囲のEQ後のピークを使い、試聴にも反映します。</p>
+          <details><summary>補正カーブと出典</summary>
+            <svg id="eq-curve" viewBox="0 0 520 90" role="img" aria-label="M5補正カーブ。20 Hzから20 kHz、中心線0 dB、上下3 dB"><path d="M10 15H510 M10 45H510 M10 75H510" fill="none" stroke="#46543e" /></svg>
+            <div class="eq-axis"><span>20 Hz</span><span>1 kHz</span><span>20 kHz</span></div>
+            <p>公式の公称特性を1 kHz基準で平滑化して逆補正。設計上限±3 dB、低域・高域の端では補正を弱めています。個々のマイクや部屋の音響を測定した補正ではありません。</p>
+            <a href="https://edge.rode.com/pdf/products/48/M5_Matched_pair_DS_V02.pdf" target="_blank" rel="noopener">RØDE公式 M5データシート（V02・2ページ）</a>
+          </details>
+        </section>
         <p id="normalization-info" class="wave-help" role="status">選択範囲のピークで再計算します（試聴・書き出し時）</p>
         <div class="export-row"><div><span class="export-title">仕上がり</span><span id="export-info">境界を確認してください</span></div><button id="export" class="primary" disabled>WAVを書き出す <span>↓</span></button></div>
       </div>
