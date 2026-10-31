@@ -41,7 +41,7 @@ cargo run -p audio-cli -- trim recording.wav \
 
 ブラウザが端末内のWAVを30秒ずつ読み、Rust/WASMで解析します。画面で境界を調整後、左右共通ゲインを適用してWAVをダウンロードします。Cloudflareは静的配信のみで、Workers PaidやR2は不要です。起動とGitHub連携の設定は [web/README.md](web/README.md) を参照してください。
 
-作業は [TODO](docs/TODO.md) の順に進めます。Client WASMへの移行とトリミング位置の可視化は完了し、次はRØDE M5補正EQです。移行前のサーバー処理版には `worker-wasm-before-client` タグを付けています。
+作業は [TODO](docs/TODO.md) の順に進めます。Client WASMへの移行、トリミング位置の可視化、[RØDE M5公称特性の補正EQ](docs/m5-eq.md)まで実装済みです。実録音での拍手検出の改善とEQ試聴・書き出しの一致も[検証済み](docs/verification-real-recording.md)です。移行前のサーバー処理版には `worker-wasm-before-client` タグを付けています。
 
 設計の詳細は [`docs/spec.md`](docs/spec.md) を参照してください。
 
