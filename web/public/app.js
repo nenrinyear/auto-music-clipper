@@ -1,4 +1,4 @@
-import { parseWav, RATE } from './audio-processing.js';
+import { parseWav } from './audio-processing.js';
 import { WaveformView } from './waveform-view.js';
 import { detectionMarkers, selectionFrames, frameSeconds, frameTime, drawTrimOverlay } from './trim-view.js';
 import { M5_PROFILE } from './m5-profile.js';
@@ -59,14 +59,15 @@ $('begin-analysis').addEventListener('click', startAnalysis);
 $('start').addEventListener('input', updateRange);
 $('end').addEventListener('input', updateRange);
 for (const id of ['start', 'end']) $(id).addEventListener('change', () => {
-  const frame = selectionFrames($(id).value, $(id).value).startFrame;
-  if (Number.isSafeInteger(frame)) $(id).value = frameSeconds(frame);
+  if (!wav) return;
+  const frame = selectionFrames($(id).value, $(id).value, wav.sampleRate).startFrame;
+  if (Number.isSafeInteger(frame)) $(id).value = frameSeconds(frame, wav.sampleRate);
   updateRange();
 });
 $('reset-trim').addEventListener('click', () => {
   if (busy || !analysis) return;
-  $('start').value = frameSeconds(analysis.start_frame ?? 0);
-  $('end').value = frameSeconds(analysis.end_frame ?? wav.frames);
+  $('start').value = frameSeconds(analysis.start_frame ?? 0, wav.sampleRate);
+  $('end').value = frameSeconds(analysis.end_frame ?? wav.frames, wav.sampleRate);
   updateRange();
 });
 $('wave').addEventListener('pointerdown', beginWaveDrag);
@@ -114,8 +115,8 @@ async function loadFile(file) {
     if (!file.name.toLowerCase().endsWith('.wav')) throw Error('WAVファイルを選択してください。');
     wav = await parseWav(file); sourceFile = file;
     $('filename').textContent = file.name;
-    const seconds = wav.frames / RATE;
-    $('fileinfo').textContent = `${wav.channels === 2 ? 'Stereo' : 'Mono'} · 48 kHz · 32-bit float · ${clock(seconds)} · ${formatBytes(file.size)}`;
+    const seconds = wav.frames / wav.sampleRate;
+    $('fileinfo').textContent = `${wav.channels === 2 ? 'Stereo' : 'Mono'} · ${wav.sampleRate / 1000} kHz · ${wav.bits}-bit ${wav.format === 1 ? 'PCM' : 'float'} · ${clock(seconds)} · ${formatBytes(file.size)}`;
     $('duration-label').textContent = clock(seconds);
     objectUrl = URL.createObjectURL(file);
     setupPlayer();
@@ -134,8 +135,8 @@ async function startAnalysis() {
     envelope = analysis.waveform;
     waveView.reset(sourceFile, wav, envelope);
     updateWaveView();
-    $('start').value = frameSeconds(analysis.start_frame ?? 0);
-    $('end').value = frameSeconds(analysis.end_frame ?? wav.frames);
+    $('start').value = frameSeconds(analysis.start_frame ?? 0, wav.sampleRate);
+    $('end').value = frameSeconds(analysis.end_frame ?? wav.frames, wav.sampleRate);
     showDetectionMarkers();
     $('status').textContent = analysis.status === 'ready' ? '自動検出 · 確認してください' : '要確認 · 手動調整してください';
     $('editor').hidden = false;
@@ -152,7 +153,7 @@ function drawWave() {
   ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#28342d'; ctx.fillRect(0, h / 2, w, 1);
   waveView.draw(ctx, w, h);
   if (!wav || !waveView.span) return;
-  drawTrimOverlay(ctx, waveView, w, h, analysis, selectionFrames($('start').value, $('end').value), { x: w / (canvas.clientWidth || w), y: h / (canvas.clientHeight || h) });
+  drawTrimOverlay(ctx, waveView, w, h, analysis, selectionFrames($('start').value, $('end').value, wav.sampleRate), { x: w / (canvas.clientWidth || w), y: h / (canvas.clientHeight || h) });
   const position = waveView.xAt(playbackTime(), w);
   if (position >= 0 && position <= w) {
     ctx.fillStyle = '#e5a46e'; ctx.fillRect(Math.min(w - 2, position), 0, 2, h);
@@ -167,12 +168,12 @@ function showDetectionMarkers() {
     item.type = 'button'; item.className = 'marker-item'; item.dataset.marker = key;
     item.style.setProperty('--marker-color', color);
     item.disabled = candidate == null;
-    item.textContent = candidate ? `${label} ${frameTime(candidate.frame)} · 確度 ${confidenceLabels[candidate.confidence] || '要確認'}` : `${label}：未検出`;
-    if (candidate) item.addEventListener('click', () => waveView.set(candidate.frame / RATE - 2.5, 5));
+    item.textContent = candidate ? `${label} ${frameTime(candidate.frame, wav.sampleRate)} · 確度 ${confidenceLabels[candidate.confidence] || '要確認'}` : `${label}：未検出`;
+    if (candidate) item.addEventListener('click', () => waveView.set(candidate.frame / wav.sampleRate - 2.5, 5));
     list.append(item);
   }
   const gaps = analysis.possible_breaks || [];
-  $('break-info').textContent = gaps.length ? `楽章間候補 ${gaps.length}か所（切り出し範囲内は保持）: ${gaps.map(gap => `${frameTime(gap.start_frame)}–${frameTime(gap.end_frame)}`).join(' / ')}` : '範囲内の音声・無音は連続して保持します。';
+  $('break-info').textContent = gaps.length ? `楽章間候補 ${gaps.length}か所（切り出し範囲内は保持）: ${gaps.map(gap => `${frameTime(gap.start_frame, wav.sampleRate)}–${frameTime(gap.end_frame, wav.sampleRate)}`).join(' / ')}` : '範囲内の音声・無音は連続して保持します。';
 }
 function updateWaveView() {
   const preciseClock = seconds => `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(2).padStart(5, '0')}`;
@@ -183,7 +184,7 @@ function updateWaveView() {
   $('zoom-out').disabled = waveView.span >= waveView.duration;
   $('wave-pan').disabled = waveView.span >= waveView.duration;
   $('wave-pan').max = String(Math.max(0, waveView.duration - waveView.span));
-  $('wave-pan').step = String(Math.max(1 / RATE, waveView.span / 1000));
+  $('wave-pan').step = String(wav ? Math.max(1 / wav.sampleRate, waveView.span / 1000) : 0.01);
   $('wave-pan').value = String(waveView.start);
   $('wave-detail').textContent = waveView.worker ? '詳細な波形を読み込み中…' : waveView.error || '';
   drawWave();
@@ -193,8 +194,8 @@ function beginWaveDrag(event) {
   const bounds = $('wave').getBoundingClientRect();
   const x = event.clientX - bounds.left;
   const distance = boundary => {
-    const frame = selectionFrames($(boundary).value, $(boundary).value).startFrame;
-    const position = waveView.xAt(frame / RATE, bounds.width);
+    const frame = selectionFrames($(boundary).value, $(boundary).value, wav.sampleRate).startFrame;
+    const position = waveView.xAt(frame / wav.sampleRate, bounds.width);
     return position >= 0 && position <= bounds.width ? Math.abs(x - position) : Infinity;
   };
   const a = distance('start'), b = distance('end');
@@ -207,7 +208,7 @@ function moveWavePointer(event) {
   const bounds = $('wave').getBoundingClientRect(), fraction = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
   const seconds = waveView.timeAt(fraction);
   if (dragMode === 'seek') seekPlayback(seconds);
-  else if (dragMode) { $(dragMode).value = frameSeconds(Math.round(seconds * RATE)); updateRange(); }
+  else if (dragMode) { $(dragMode).value = frameSeconds(Math.round(seconds * wav.sampleRate), wav.sampleRate); updateRange(); }
 }
 function updateRange() {
   if (!wav) return;
@@ -216,10 +217,10 @@ function updateRange() {
   const { startFrame, endFrame } = currentPlan();
   const valid = Number.isSafeInteger(startFrame) && Number.isSafeInteger(endFrame) && startFrame >= 0 && endFrame <= wav.frames && endFrame > startFrame;
   $('export').disabled = busy || !analysis || !valid;
-  $('selection-length').textContent = valid ? `${clock((endFrame - startFrame) / RATE)}を書き出し` : '範囲が不正です';
+  $('selection-length').textContent = valid ? `${clock((endFrame - startFrame) / wav.sampleRate)}を書き出し` : '範囲が不正です';
   const rangeLabel = analysis?.start_frame == null || analysis?.end_frame == null ? '自動検出なし・手動指定の範囲'
     : startFrame === analysis.start_frame && endFrame === analysis.end_frame ? '自動検出の範囲' : '手動調整した範囲';
-  $('trim-state').textContent = !valid ? '開始・終了位置を確認してください。' : `${rangeLabel} · ${frameTime(startFrame)}–${frameTime(endFrame)} · ${(endFrame - startFrame).toLocaleString('ja-JP')}サンプル（終了位置は含みません）`;
+  $('trim-state').textContent = !valid ? '開始・終了位置を確認してください。' : `${rangeLabel} · ${frameTime(startFrame, wav.sampleRate)}–${frameTime(endFrame, wav.sampleRate)} · ${(endFrame - startFrame).toLocaleString('ja-JP')}サンプル（終了位置は含みません）`;
   $('reset-trim').disabled = busy || !analysis || (startFrame === (analysis.start_frame ?? 0) && endFrame === (analysis.end_frame ?? wav.frames));
   drawWave(); updateExportInfo();
 }
@@ -236,7 +237,7 @@ function previewSettingsChanged() {
   stopPlayback(); restoreOriginalPreview(); updateExportInfo();
 }
 function currentPlan() {
-  return { ...selectionFrames($('start').value, $('end').value), targetDb: Number($('target').value), normalize: $('normalize').checked, eq: $('m5-eq').checked ? 'rode-m5' : 'none' };
+  return { ...selectionFrames($('start').value, $('end').value, wav.sampleRate), targetDb: Number($('target').value), normalize: $('normalize').checked, eq: $('m5-eq').checked ? 'rode-m5' : 'none' };
 }
 function playbackTime() { return (player?.currentTime || 0) + playbackOffset; }
 function restoreOriginalPreview() {
@@ -267,7 +268,7 @@ function drawEqCurve() {
   svg.append(line);
 }
 function connectPreview() {
-  previewContext ??= new AudioContext({ sampleRate: RATE });
+  previewContext ??= new AudioContext();
   if (!previewSource) {
     previewGain = previewContext.createGain();
     previewGain.gain.value = 0;
@@ -295,7 +296,7 @@ async function previewNormalization(plan) {
 function setupPlayer() {
   const audio = player = new Audio(objectUrl);
   audio.preload = 'metadata';
-  $('seek').max = String(wav.frames / RATE);
+  $('seek').max = String(wav.frames / wav.sampleRate);
   for (const event of ['loadedmetadata', 'timeupdate', 'seeked', 'play', 'pause', 'ended']) {
     audio.addEventListener(event, () => {
       if (player !== audio) return;
@@ -303,17 +304,13 @@ function setupPlayer() {
       updatePlayback();
     });
   }
-  audio.addEventListener('error', () => {
-    if (player !== audio) return;
-    stopPlayback(); showError('このブラウザではWAVを試聴できません。');
-  });
   updatePlayback();
 }
 function updatePlayback() {
   cancelAnimationFrame(animationFrame);
   const seconds = playbackTime();
   $('seek').value = String(seconds);
-  $('playback-time').textContent = `${clock(seconds)} / ${clock(wav ? wav.frames / RATE : 0)}`;
+  $('playback-time').textContent = `${clock(seconds)} / ${clock(wav ? wav.frames / wav.sampleRate : 0)}`;
   const labels = { 'listen-start': '▶ 冒頭を試聴', 'listen-end': '▶ 終わりを試聴', play: '▶ 再生' };
   for (const [id, label] of Object.entries(labels)) {
     const active = activePreview === id;
@@ -331,7 +328,7 @@ function stopPlayback() {
 }
 function seekPlayback(seconds) {
   if (!player || !wav || busy) return;
-  const duration = processedFrames === undefined ? wav.frames / RATE : processedFrames / RATE;
+  const duration = processedFrames === undefined ? wav.frames / wav.sampleRate : processedFrames / wav.sampleRate;
   player.currentTime = Math.max(0, Math.min(duration, seconds - playbackOffset));
   updatePlayback();
 }
@@ -349,7 +346,7 @@ async function preview(seconds, button) {
       const prepared = await prepareEqPreview(plan);
       if (request !== playbackRequest || player !== audio) return;
       if (audio.src !== prepared.url) audio.src = prepared.url;
-      playbackOffset = prepared.startFrame / RATE; processedFrames = prepared.frames;
+      playbackOffset = prepared.startFrame / wav.sampleRate; processedFrames = prepared.frames;
       gain = 1; // EQ and normalization are baked using the export pipeline.
     } else {
       restoreOriginalPreview(); gain = await previewNormalization(plan);

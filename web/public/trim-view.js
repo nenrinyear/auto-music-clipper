@@ -6,22 +6,23 @@ export const detectionMarkers = [
   { key: 'final_applause_start', label: '拍手開始候補', color: '#ff9a86' },
 ];
 
-export function selectionFrames(start, end) {
-  const frame = value => String(value).trim() === '' ? NaN : Math.round(Number(value) * RATE);
+export function selectionFrames(start, end, sampleRate = RATE) {
+  const frame = value => String(value).trim() === '' ? NaN : Math.round(Number(value) * sampleRate);
   return { startFrame: frame(start), endFrame: frame(end) };
 }
 
-// Eight decimal places retain every integer frame at 48 kHz on round-trip.
-export const frameSeconds = frame => (frame / RATE).toFixed(8).replace(/\.?0+$/, '');
-export function frameTime(frame) {
-  const seconds = Math.floor(frame / RATE), fraction = Math.round((frame % RATE) * 1_000_000 / RATE);
+// Keep enough decimal places to recover the original frame from the input.
+export const frameSeconds = (frame, sampleRate = RATE) => (frame / sampleRate).toFixed(Math.max(8, Math.ceil(Math.log10(sampleRate)))).replace(/\.?0+$/, '');
+export function frameTime(frame, sampleRate = RATE) {
+  const micros = Math.round(frame * 1_000_000 / sampleRate);
+  const seconds = Math.floor(micros / 1_000_000), fraction = micros % 1_000_000;
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}.${String(fraction).padStart(6, '0')}`;
 }
 
 export function drawTrimOverlay(ctx, view, width, height, report, selection, scale = { x: 1, y: 1 }) {
   const { startFrame, endFrame } = selection;
   if (!Number.isSafeInteger(startFrame) || !Number.isSafeInteger(endFrame) || endFrame <= startFrame) return;
-  const xAt = frame => view.xAt(frame / RATE, width);
+  const xAt = frame => view.xAt(frame / (view.wav?.sampleRate ?? RATE), width);
   const a = xAt(startFrame), b = xAt(endFrame);
   const left = Math.max(0, Math.min(width, a)), right = Math.max(0, Math.min(width, b));
   const label = (text, x, y, color) => {

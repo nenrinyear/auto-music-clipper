@@ -53,6 +53,37 @@ test('processes and downloads locally without any audio upload', async ({ page }
   expect(errors).toEqual([]);
 });
 
+test('loads, previews and exports 44.1 kHz 16-bit PCM', async ({ page }) => {
+  const sampleRate = 44_100, input = Buffer.alloc(44 + sampleRate * 4);
+  makeWav(1, 1).copy(input, 0, 0, 44);
+  input.writeUInt32LE(input.length - 8, 4);
+  input.writeUInt16LE(1, 20);
+  input.writeUInt32LE(sampleRate, 24);
+  input.writeUInt32LE(sampleRate * 2, 28);
+  input.writeUInt16LE(2, 32);
+  input.writeUInt16LE(16, 34);
+  input.writeUInt32LE(input.length - 44, 40);
+  input.fill(Buffer.from([0, 64]), 44);
+  await page.goto('/');
+  await page.locator('#file').setInputFiles({ name: 'pcm.wav', mimeType: 'audio/wav', buffer: input });
+  await expect(page.locator('#fileinfo')).toContainText('44.1 kHz · 16-bit PCM');
+  await page.locator('#begin-analysis').click();
+  await expect(page.locator('#seek')).toHaveAttribute('max', '2');
+  await page.locator('#start').fill('0.5');
+  await page.locator('#end').fill('1');
+  await page.locator('#normalize').uncheck();
+  await page.locator('#play').click();
+  await expect.poll(async () => Number(await page.locator('#seek').inputValue())).toBeGreaterThan(0);
+  await page.locator('#stop').click();
+  const downloaded = page.waitForEvent('download');
+  await page.locator('#export').click();
+  const output = await readFile((await (await downloaded).path())!);
+  expect(output.readUInt32LE(24)).toBe(sampleRate);
+  expect(output.length).toBe(56 + sampleRate / 2 * 4);
+  expect(output.readFloatLE(56)).toBe(.5);
+  await expect(page.locator('#error')).toBeHidden();
+});
+
 test('falls back to a local Blob when temporary file storage is unavailable', async ({ page }) => {
   await page.route('**/audio-worker.js', async route => {
     const response = await route.fetch();

@@ -1,5 +1,3 @@
-import { RATE } from './audio-processing.js';
-
 // View coordinates are independent of trim bounds and the full-recording seek bar.
 export class WaveformView {
   constructor(onChange) {
@@ -9,11 +7,11 @@ export class WaveformView {
   reset(file, wav, overview = []) {
     this.worker?.terminate(); this.worker = undefined;
     this.file = file; this.wav = wav; this.overview = overview;
-    this.start = 0; this.end = wav ? wav.frames / RATE : 0;
+    this.start = 0; this.end = wav ? wav.frames / wav.sampleRate : 0;
     this.peaks = undefined; this.error = undefined;
   }
   get span() { return this.end - this.start; }
-  get duration() { return this.wav ? this.wav.frames / RATE : 0; }
+  get duration() { return this.wav ? this.wav.frames / this.wav.sampleRate : 0; }
   set(start, span) {
     if (!this.wav) return;
     const minSpan = Math.min(.1, this.duration);
@@ -41,8 +39,8 @@ export class WaveformView {
     };
     this.error = undefined;
     worker.postMessage({ file: this.file, plan: {
-      startFrame: Math.floor(this.start * RATE),
-      endFrame: Math.min(this.wav.frames, Math.ceil(this.end * RATE)), bins: 1200,
+      startFrame: Math.floor(this.start * this.wav.sampleRate),
+      endFrame: Math.min(this.wav.frames, Math.ceil(this.end * this.wav.sampleRate)), bins: 1200,
     } });
     this.onChange();
   }

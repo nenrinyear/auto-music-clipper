@@ -36,7 +36,7 @@ describe('waveform detail', () => {
     }
     vi.stubGlobal('Worker', FakeWorker);
     const view = new WaveformView(vi.fn());
-    view.reset(new Blob(), { frames: 40 * RATE }, [0]);
+    view.reset(new Blob(), { frames: 40 * RATE, sampleRate: RATE }, [0]);
     view.set(10, 5);
     expect(view.timeAt(.5)).toBe(12.5);
     expect(view.xAt(11, 1200)).toBe(240);

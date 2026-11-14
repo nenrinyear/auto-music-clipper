@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect, vi } from 'vitest';
 import * as wasm from '../public/wasm/audio_wasm.js';
-import { parseWav, analyzeAudio, renderAudio, measureNormalization, BLOB_LIMIT } from '../public/audio-processing.js';
+import { parseWav, analyzeAudio, readWaveform, renderAudio, measureNormalization, BLOB_LIMIT } from '../public/audio-processing.js';
 import { makeWav, RATE } from './fixtures';
 
 wasm.initSync({ module: readFileSync(new URL('../public/wasm/audio_wasm_bg.wasm', import.meta.url)) });
@@ -40,16 +40,62 @@ describe('client WASM audio processing', () => {
   });
 
   it.each([
-    { format: 1, bits: 24, rate: 48000, channels: 2, actual: '48 kHz・24-bit 整数PCM・stereo' },
-    { format: 1, bits: 32, rate: 48000, channels: 1, actual: '48 kHz・32-bit 整数PCM・mono' },
-    { format: 3, bits: 32, rate: 44100, channels: 2, actual: '44.1 kHz・32-bit float・stereo' },
+    { format: 6, bits: 8, rate: 8000, channels: 1, actual: '8 kHz・8-bit 形式コード 0x6・mono' },
     { format: 3, bits: 32, rate: 48000, channels: 6, actual: '48 kHz・32-bit float・6チャンネル' },
   ])('explains the detected unsupported format: $actual', async ({ format, bits, rate, channels, actual }) => {
     const bytes = makeWav(1);
     bytes.writeUInt16LE(format, 20); bytes.writeUInt16LE(channels, 22);
     bytes.writeUInt32LE(rate, 24); bytes.writeUInt16LE(bits, 34);
     await expect(parseWav(fileOf(bytes))).rejects.toThrow(actual);
-    await expect(parseWav(fileOf(bytes))).rejects.toThrow('書き出してから、選び直してください');
+  });
+
+  it.each([
+    [8000, 8, 1, 1], [44100, 16, 2, 1], [96000, 24, 2, 1],
+    [192000, 32, 1, 1], [44100, 32, 2, 3], [96000, 64, 1, 3],
+  ])('reads and exports %i Hz, %i-bit WAV with %i channel(s), format %i', async (sampleRate, bits, channels, format) => {
+    const stride = bits / 8, blockAlign = channels * stride;
+    const frames = sampleRate + 1;
+    const bytes = Buffer.alloc(44 + frames * blockAlign + (frames * blockAlign % 2));
+    makeWav(1).copy(bytes, 0, 0, 44);
+    bytes.writeUInt32LE(bytes.length - 8, 4);
+    bytes.writeUInt16LE(format, 20);
+    bytes.writeUInt16LE(channels, 22);
+    bytes.writeUInt32LE(sampleRate, 24);
+    bytes.writeUInt32LE(sampleRate * blockAlign, 28);
+    bytes.writeUInt16LE(blockAlign, 32);
+    bytes.writeUInt16LE(bits, 34);
+    bytes.writeUInt32LE(frames * blockAlign, 40);
+    for (let i = 0; i < frames * channels; i++) {
+      const value = i % 2 === 0 ? -.5 : .25, offset = 44 + i * stride;
+      if (format === 3) {
+        if (bits === 32) bytes.writeFloatLE(value, offset);
+        else bytes.writeDoubleLE(value, offset);
+      } else if (bits === 8) bytes.writeUInt8(128 + value * 128, offset);
+      else bytes.writeIntLE(value * 2 ** (bits - 1), offset, stride);
+    }
+    const file = fileOf(bytes), wav = await parseWav(file);
+    expect(wav).toMatchObject({ sampleRate, bits, channels, frames });
+    expect(await analyzeAudio(file, wav, wasm)).toMatchObject({ sample_rate: sampleRate, total_frames: frames });
+    expect(await readWaveform(file, wav, { startFrame: 0, endFrame: 2, bins: 1 })).toEqual(new Float32Array([.5]));
+    const { blob } = await renderAudio(file, wav, { startFrame: 1, endFrame: 3, normalize: false, targetDb: -1 }, wasm);
+    expect(await parseWav(blob!)).toMatchObject({ sampleRate, channels, bits: 32, format: 3, frames: 2 });
+    const output = Buffer.from(await blob!.arrayBuffer());
+    expect(output.readFloatLE(56)).toBe(channels === 1 ? .25 : -.5);
+  });
+
+  it('decodes 24 valid bits left-aligned in a 32-bit extensible PCM container', async () => {
+    const bytes = Buffer.alloc(76);
+    bytes.write('RIFF'); bytes.writeUInt32LE(68, 4); bytes.write('WAVEfmt ', 8);
+    bytes.writeUInt32LE(40, 16); bytes.writeUInt16LE(0xfffe, 20); bytes.writeUInt16LE(1, 22);
+    bytes.writeUInt32LE(48000, 24); bytes.writeUInt32LE(192000, 28);
+    bytes.writeUInt16LE(4, 32); bytes.writeUInt16LE(32, 34); bytes.writeUInt16LE(22, 36);
+    bytes.writeUInt16LE(24, 38); bytes.writeUInt32LE(4, 40);
+    Buffer.from('0100000000001000800000aa00389b71', 'hex').copy(bytes, 44);
+    bytes.write('data', 60); bytes.writeUInt32LE(8, 64);
+    bytes.writeInt32LE(-0x40000000, 68); bytes.writeInt32LE(0x20000000, 72);
+    const file = fileOf(bytes), wav = await parseWav(file);
+    expect(wav).toMatchObject({ format: 1, bits: 32, validBits: 24 });
+    expect(await readWaveform(file, wav, { startFrame: 0, endFrame: 2, bins: 2 })).toEqual(new Float32Array([.5, .25]));
   });
 
   it('analyzes across the 30-second seam and matches the continuous Rust analyzer', async () => {
@@ -114,7 +160,7 @@ describe('client WASM audio processing', () => {
     const damaged = Buffer.from(bytes); damaged.writeUInt32LE(1, 4);
     await expect(parseWav(fileOf(damaged))).rejects.toThrow('チャンク');
     const wrongRate = Buffer.from(bytes); wrongRate.writeUInt32LE(44100, 24);
-    await expect(parseWav(fileOf(wrongRate))).rejects.toThrow('48 kHz');
+    await expect(parseWav(fileOf(wrongRate))).rejects.toThrow('チャンク');
     bytes.writeFloatLE(NaN, 44);
     const file = fileOf(bytes), wav = await parseWav(file);
     await expect(analyzeAudio(file, wav, wasm)).rejects.toThrow('non-finite');
