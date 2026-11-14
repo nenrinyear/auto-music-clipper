@@ -45,20 +45,24 @@
       </div>
       <div id="progress" class="progress" role="status" aria-live="polite" aria-atomic="true" hidden><span class="spinner" aria-hidden="true"></span><span id="progress-text">解析を準備しています…</span></div>
       <div id="editor" hidden>
-        <section class="editor-section" aria-labelledby="trim-heading">
-          <div class="section-head"><h2 id="trim-heading" tabindex="-1"><span class="step-number" aria-hidden="true">2</span>クリップ範囲を確認する</h2><span id="status" class="status"></span></div>
-          <p>自動検出は目安です。開始と終了を試聴し、残したい範囲に調整してください。</p>
-          <div class="wave-card">
+        <section class="trim-section" aria-labelledby="trim-heading">
+          <div>
+            <div class="section-head"><h2 id="trim-heading" tabindex="-1"><span class="step-number" aria-hidden="true">2</span>クリップ範囲を確認する</h2><span id="status" class="status"></span></div>
+            <p>自動検出は目安です。開始と終了を試聴し、残したい範囲に調整してください。</p>
             <div class="wave-tools" role="group" aria-label="波形の拡大表示">
               <button id="zoom-in" class="secondary" aria-label="波形を拡大">＋</button><button id="zoom-out" class="secondary" aria-label="波形を縮小">−</button><output id="zoom-level" aria-label="波形の拡大率">1.0×</output>
               <button id="zoom-all" class="secondary">全体</button><button id="zoom-selection" class="secondary">選択範囲</button><button id="zoom-start" class="secondary">開始付近</button><button id="zoom-end" class="secondary">終了付近</button>
             </div>
-            <div class="wave-visual">
-              <div class="wave-labels"><span id="wave-start-label">0:00</span><span id="duration-label"></span></div>
-              <canvas id="wave" width="1200" height="240" role="img" aria-label="録音の波形と保存範囲" aria-describedby="wave-instructions">開始・終了は下の数値入力、再生位置はスライダーで変更できます。</canvas>
+          </div>
+          <div class="wave-visual">
+            <div class="wave-labels"><span id="wave-start-label">0:00</span><span id="duration-label"></span></div>
+            <canvas id="wave" width="1200" height="240" role="img" aria-label="録音の波形と保存範囲" aria-describedby="wave-instructions">開始・終了は下の数値入力、再生位置はスライダーで変更できます。</canvas>
+            <div>
               <div class="wave-legend" aria-label="波形の凡例"><span class="legend-keep">明るい区間：保存</span><span class="legend-cut">暗い区間：カット</span><span class="legend-detected">点線：検出候補・自動境界</span><span class="legend-selected">緑の実線：保存境界</span></div>
               <div id="detection-markers" class="detection-markers" role="group" aria-label="自動検出の候補"></div>
             </div>
+          </div>
+          <div>
             <label class="wave-pan-label">表示位置<input id="wave-pan" type="range" min="0" max="0" value="0" step="0.01" aria-label="波形の表示位置" disabled /></label>
             <p id="wave-detail" class="wave-help" role="status"></p>
             <p id="break-info" class="wave-help"></p>
@@ -66,9 +70,9 @@
             <input id="seek" class="seek" type="range" min="0" max="0" step="0.01" value="0" aria-label="再生位置" />
             <p id="wave-instructions" class="wave-help">波形のクリックで再生位置を移動、緑の線のドラッグで範囲を調整できます。キーボードでは再生位置スライダーと、下の開始・終了の数値入力を使ってください。停止ボタンは再生中に使えます。</p>
             <div class="range-inputs"><label>開始（秒）<input id="start" type="number" min="0" step="0.01" /></label><label>終了（秒）<input id="end" type="number" min="0" step="0.01" /></label><span id="selection-length"></span></div>
+            <div class="trim-summary"><p id="trim-state" class="wave-help" role="status"></p><button id="reset-trim" class="secondary" aria-describedby="reset-help" disabled>自動検出の範囲に戻す</button><p id="reset-help" class="wave-help">範囲を手動で変更すると、自動検出の範囲に戻せます。</p></div>
+            <div class="controls"><button id="listen-start" class="secondary" aria-pressed="false">▶ 冒頭を試聴</button><button id="listen-end" class="secondary" aria-pressed="false">▶ 終わりを試聴</button></div>
           </div>
-          <div class="trim-summary"><p id="trim-state" class="wave-help" role="status"></p><button id="reset-trim" class="secondary" aria-describedby="reset-help" disabled>自動検出の範囲に戻す</button><p id="reset-help" class="wave-help">範囲を手動で変更すると、自動検出の範囲に戻せます。</p></div>
-          <div class="controls"><button id="listen-start" class="secondary" aria-pressed="false">▶ 冒頭を試聴</button><button id="listen-end" class="secondary" aria-pressed="false">▶ 終わりを試聴</button></div>
         </section>
         <section class="editor-section" aria-labelledby="audio-heading">
           <div class="section-head"><h2 id="audio-heading"><span class="step-number" aria-hidden="true">3</span>音量・補正を設定する</h2></div>
