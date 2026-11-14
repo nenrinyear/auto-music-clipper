@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#006e3c" />
-  <title>余韻 — 演奏録音クリッパー</title>
+  <title>トリミングツール</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/style.css" />
   <link rel="stylesheet" href="/worker-flow.css" />
@@ -12,13 +12,12 @@
 <body>
   <a class="skip-link" href="#main">本文へ移動</a>
   <header class="topbar">
-    <a class="brand" href="/" aria-label="余韻 ホーム"><span class="brand-mark" aria-hidden="true">余</span><span>余韻<span class="brand-sub"> / YO-IN</span></span></a>
+    <a class="brand" href="/" aria-label="トリミングツール ホーム">トリミングツール</a>
     <span class="privacy">録音はこの端末内で処理します</span>
   </header>
   <main id="main" tabindex="-1">
     <section class="intro" aria-labelledby="page-title">
-      <p class="eyebrow">演奏録音クリッパー</p>
-      <h1 id="page-title">演奏のはじまりと、余韻の終わりを。</h1>
+      <h1 id="page-title">録音をトリミング</h1>
       <p>録音から演奏の開始と終わりを自動で見つけます。範囲を確認し、左右のバランスを保って音量を整えて、WAVで保存できます。</p>
       <ol class="steps" aria-label="編集の流れ">
         <li><span>1</span>読み込み</li><li><span>2</span>範囲確認</li><li><span>3</span>音量調整</li><li><span>4</span>書き出し</li>
@@ -96,7 +95,6 @@
     </section>
     <aside id="empty-note" class="note" aria-label="解析について"><p><strong>解析結果は目安です。</strong>残響や拍手の入り方に合わせて、開始・終了を調整してから書き出してください。</p></aside>
   </main>
-  <footer><span>余韻 — 演奏録音を、気持ちよく。</span><span>音声のアップロード不要</span></footer>
   <script type="module" src="/app.js"></script>
 </body>
 </html>
