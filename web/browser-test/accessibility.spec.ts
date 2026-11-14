@@ -24,7 +24,7 @@ test('completes the editor flow with keyboard controls and announces the downloa
   const start = page.getByRole('spinbutton', { name: '開始（秒）' });
   await start.fill('1');
   await page.getByRole('spinbutton', { name: '終了（秒）' }).fill('2');
-  const normalize = page.getByRole('checkbox', { name: '音量を均等にする（ノーマライズ）' });
+  const normalize = page.getByRole('checkbox', { name: 'ピークを揃える（ノーマライズ）' });
   await normalize.focus();
   await page.keyboard.press('Space');
   await expect(normalize).not.toBeChecked();

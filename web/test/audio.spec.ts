@@ -31,12 +31,17 @@ describe('client WASM audio processing', () => {
     expect(noRead).not.toHaveBeenCalled();
   });
 
-  it('keeps preview gain finite for silence and limits amplification to 24 dB', async () => {
+  it('leaves silence unchanged and normalizes quiet samples to the requested peak', async () => {
     const bytes = makeWav(1, 1), file = fileOf(bytes), wav = await parseWav(file);
     const plan = { startFrame: 0, endFrame: wav.frames, normalize: true, targetDb: -1 };
     expect(await measureNormalization(file, wav, plan, wasm)).toEqual({ peak: 0, gain: 1 });
     bytes.writeFloatLE(.00001, 44);
-    expect((await measureNormalization(fileOf(bytes), wav, plan, wasm)).gain).toBeCloseTo(10 ** (24 / 20), 6);
+    const quiet = fileOf(bytes);
+    const measured = await measureNormalization(quiet, wav, plan, wasm);
+    expect(measured.gain).toBeGreaterThan(10 ** (24 / 20));
+    const rendered = await renderAudio(quiet, wav, plan, wasm);
+    const output = Buffer.from(await rendered.blob!.arrayBuffer());
+    expect(output.readFloatLE(56)).toBeCloseTo(10 ** (-1 / 20), 6);
   });
 
   it.each([

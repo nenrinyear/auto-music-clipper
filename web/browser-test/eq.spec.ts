@@ -66,7 +66,9 @@ test('uses the exact corrected export for preview and preserves original timelin
   await expect.poll(async () => Number(await seek.inputValue())).toBeGreaterThanOrEqual(2);
   await page.locator('#stop').click();
   await page.locator('.eq-panel summary').click();
-  await expect(page.locator('#eq-curve polyline')).toHaveCount(1);
+  await expect(page.locator('#eq-curve polyline')).toHaveCount(2);
+  const tick = page.locator('#eq-curve').getByText('1 kHz', { exact: true });
+  expect(Number(await tick.getAttribute('x'))).toBeCloseTo(40 + Math.log10(1000 / 20) * 454 / 3);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/m5-eq-mobile.png', fullPage: true });

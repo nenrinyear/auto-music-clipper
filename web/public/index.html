@@ -76,15 +76,15 @@
         </section>
         <section class="editor-section" aria-labelledby="audio-heading">
           <div class="section-head"><h2 id="audio-heading"><span class="step-number" aria-hidden="true">3</span>音量・補正を設定する</h2></div>
-          <label class="gain-control"><input id="normalize" type="checkbox" checked aria-describedby="normalize-help" />音量を均等にする（ノーマライズ）</label>
-          <div class="gain-row"><div><strong>ステレオバランスを維持</strong><span id="normalize-help">左右に同じゲインを適用します。</span></div><label class="gain-label">ピーク上限<select id="target"><option value="-1">−1 dBFS</option><option value="-0.5">−0.5 dBFS</option><option value="0">0 dBFS</option></select></label></div>
+          <label class="gain-control"><input id="normalize" type="checkbox" checked aria-describedby="normalize-help" />ピークを揃える（ノーマライズ）</label>
+          <div class="gain-row"><span id="normalize-help">選択範囲で左右のうち大きいピークが指定値に達するよう、両チャンネルに同じゲインを適用します。</span><label class="gain-label">目標ピーク<select id="target"><option value="-1">−1 dBFS</option><option value="-0.5">−0.5 dBFS</option><option value="0">0 dBFS</option></select></label></div>
           <div class="eq-panel">
             <label><input id="m5-eq" type="checkbox" aria-describedby="eq-help" />RØDE M5で録音した音声を補正する</label>
             <p id="eq-help">左右に同じ補正を適用します。ノーマライズ有効時は選択範囲のEQ後のピークを使い、試聴にも反映します。</p>
-            <details><summary>補正カーブと出典</summary>
-              <svg id="eq-curve" viewBox="0 0 520 90" role="img" aria-label="M5補正カーブ。20 Hzから20 kHz、中心線0 dB、上下3 dB"><path d="M10 15H510 M10 45H510 M10 75H510" fill="none" stroke="#788a80" /></svg>
-              <div class="eq-axis"><span>20 Hz</span><span>1 kHz</span><span>20 kHz</span></div>
-              <p>公式の公称特性を1 kHz基準で平滑化して逆補正。設計上限±3 dB、低域・高域の端では補正を弱めています。個々のマイクや部屋の音響を測定した補正ではありません。</p>
+            <details><summary>公称周波数特性と補正EQ</summary>
+              <svg id="eq-curve" viewBox="0 0 520 150" role="img" aria-label="M5の公称周波数特性と補正EQ。横軸は20 Hzから20 kHzの対数目盛、縦軸は−4 dBから＋4 dB。"></svg>
+              <div class="eq-legend"><span class="eq-response">M5公称特性（1 kHz基準）</span><span class="eq-correction">適用する補正EQ</span></div>
+              <p>公称特性から逆向きの補正を設計し、低域と高域の端では補正を弱めています。</p>
               <a href="https://edge.rode.com/pdf/products/48/M5_Matched_pair_DS_V02.pdf" target="_blank" rel="noopener">RØDE公式 M5データシート（V02・2ページ、新しいタブで開きます）</a>
             </details>
           </div>

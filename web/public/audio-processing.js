@@ -225,7 +225,7 @@ export async function measureNormalization(file, wav, plan, wasm, progress = () 
     peak = Math.max(peak, wasm.measure_chunk_peak(samples));
     progress({ phase: 'measure', fraction: (end - startFrame) / (endFrame - startFrame) });
   }
-  const gain = normalize && peak > 0 ? Math.min(10 ** (targetDb / 20) / peak, 10 ** (24 / 20)) : 1;
+  const gain = normalize && peak > 0 ? 10 ** (targetDb / 20) / peak : 1;
   return { peak, gain };
 }
 

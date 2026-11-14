@@ -1,7 +1,7 @@
 import { parseWav } from './audio-processing.js';
 import { WaveformView } from './waveform-view.js';
 import { detectionMarkers, selectionFrames, frameSeconds, frameTime, drawTrimOverlay } from './trim-view.js';
-import { M5_PROFILE } from './m5-profile.js';
+import { M5Equalizer, M5_PROFILE } from './m5-eq.js';
 
 const $ = id => document.getElementById(id);
 const drop = $('drop'), fileInput = $('file'), workspace = $('workspace');
@@ -114,6 +114,7 @@ async function loadFile(file) {
   try {
     if (!file.name.toLowerCase().endsWith('.wav')) throw Error('WAVファイルを選択してください。');
     wav = await parseWav(file); sourceFile = file;
+    drawEqCurve(wav.sampleRate);
     $('filename').textContent = file.name;
     const seconds = wav.frames / wav.sampleRate;
     $('fileinfo').textContent = `${wav.channels === 2 ? 'Stereo' : 'Mono'} · ${wav.sampleRate / 1000} kHz · ${wav.bits}-bit ${wav.format === 1 ? 'PCM' : 'float'} · ${clock(seconds)} · ${formatBytes(file.size)}`;
@@ -260,12 +261,44 @@ async function prepareEqPreview(plan) {
     return preparedPreview;
   } finally { $('progress').hidden = true; setBusy(false); }
 }
-function drawEqCurve() {
+function drawEqCurve(sampleRate = M5_PROFILE.design.sampleRate) {
   const svg = $('eq-curve'), ns = 'http://www.w3.org/2000/svg';
-  const line = document.createElementNS(ns, 'polyline');
-  line.setAttribute('points', M5_PROFILE.design.curve.map(([frequency, , db]) => `${10 + Math.log10(frequency / 20) / 3 * 500},${45 - db * 10}`).join(' '));
-  line.setAttribute('fill', 'none'); line.setAttribute('stroke', '#d4ef83'); line.setAttribute('stroke-width', '2');
-  svg.append(line);
+  const x = frequency => 40 + Math.log10(frequency / 20) / 3 * 454;
+  const y = db => 65 - db * 12;
+  svg.replaceChildren();
+  const add = (tag, attributes, label = '') => {
+    const element = document.createElementNS(ns, tag);
+    for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, value);
+    element.textContent = label;
+    svg.append(element);
+  };
+  for (const db of [-4, -2, 0, 2, 4]) {
+    add('line', { x1: x(20), x2: x(20000), y1: y(db), y2: y(db), stroke: db === 0 ? '#8b9d92' : '#43534b' });
+    add('text', { x: 34, y: y(db) + 4, 'text-anchor': 'end', fill: '#eef2eb', 'font-size': 12 }, `${db > 0 ? '+' : ''}${db}`);
+  }
+  for (const [frequency, label] of [[20, '20 Hz'], [100, '100'], [1000, '1 kHz'], [10000, '10 kHz'], [20000, '20 kHz']]) {
+    add('line', { x1: x(frequency), x2: x(frequency), y1: y(4), y2: y(-4), stroke: '#43534b' });
+    add('text', { x: x(frequency), y: 137, 'text-anchor': 'middle', fill: '#eef2eb', 'font-size': 12 }, label);
+  }
+  const response = M5_PROFILE.source.response;
+  const bands = new M5Equalizer(1, sampleRate).bands;
+  const highestFrequency = Math.min(20000, sampleRate / 2);
+  const correction = response.filter(([frequency]) => frequency < highestFrequency).map(([frequency]) => frequency);
+  if (highestFrequency >= 20) correction.push(highestFrequency);
+  const correctionDb = frequency => {
+    const angle = 2 * Math.PI * frequency / sampleRate;
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const cos2 = Math.cos(2 * angle), sin2 = Math.sin(2 * angle);
+    return bands.reduce((db, [b0, b1, b2, a1, a2]) => db + 20 * Math.log10(
+      Math.hypot(b0 + b1 * cos + b2 * cos2, b1 * sin + b2 * sin2)
+      / Math.hypot(1 + a1 * cos + a2 * cos2, a1 * sin + a2 * sin2)), 0);
+  };
+  const plot = (data, stroke, dash = '') => add('polyline', {
+    points: data.map(([frequency, db]) => `${x(frequency)},${y(db)}`).join(' '),
+    fill: 'none', stroke, 'stroke-width': 2, 'stroke-dasharray': dash,
+  });
+  plot(response, '#ff8984');
+  plot(correction.map(frequency => [frequency, correctionDb(frequency)]), '#d4ef83', '6 3');
 }
 function connectPreview() {
   previewContext ??= new AudioContext();
