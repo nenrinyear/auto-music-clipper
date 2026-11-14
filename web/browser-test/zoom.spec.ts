@@ -18,6 +18,8 @@ test('zooms, pans and edits boundaries using the visible time interval', async (
   const canvas = page.locator('#wave');
   await canvas.scrollIntoViewIfNeeded();
   const bounds = (await canvas.boundingBox())!;
+  expect(bounds.x).toBe(0);
+  expect(bounds.width).toBe(await page.evaluate(() => document.documentElement.clientWidth));
   // Handle at 4 s is in the center of a 1.5–6.5 s viewport.
   await page.mouse.move(bounds.x + bounds.width * .5, bounds.y + bounds.height / 2);
   await page.mouse.down();
@@ -61,5 +63,8 @@ test('zooms, pans and edits boundaries using the visible time interval', async (
   await page.locator('#zoom-start').click();
   await expect(page.locator('#wave-detail')).toHaveText('');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const mobileBounds = (await canvas.boundingBox())!;
+  expect(mobileBounds.x).toBe(0);
+  expect(mobileBounds.width).toBe(await page.evaluate(() => document.documentElement.clientWidth));
   await page.screenshot({ path: 'test-results/waveform-zoom-mobile.png', fullPage: true });
 });
