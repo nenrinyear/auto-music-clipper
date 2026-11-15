@@ -1,6 +1,15 @@
 # Auto Music Clipper
 
-吹奏楽・アンサンブルの録音から演奏範囲を推定し、前後を整えて保存するRustの試作です。入力は48 kHz・32 bit float WAV、モノラルまたはステレオを想定しています。
+吹奏楽・アンサンブルの録音から演奏範囲を推定し、前後を整えて保存するツールです。ブラウザで使うWeb版と、コマンドラインで使うCLI版があります。
+
+## 入力形式
+
+| | チャンネル | サンプリングレート | WAVのサンプル形式 |
+| --- | --- | --- | --- |
+| Web版 | モノラル／ステレオ | 48 kHz固定の制限なし | 整数PCM（8・16・24・32 bit）とIEEE浮動小数点（32・64 bit） |
+| CLI版 | モノラル／ステレオ | 48 kHz | 32-bit float |
+
+Web版はRIFF/WAVE形式で120分まで読み込めます。自動検出には48 kHzに変換した音声を使い、書き出しは元のサンプリングレートの32-bit float WAVです。詳細は [Web版の入力と保存](web/README.md#ファイルと保存) を参照してください。
 
 ## Build
 
@@ -39,7 +48,7 @@ cargo run -p audio-cli -- trim recording.wav \
 - `crates/audio-wasm`: ブラウザ内で解析・ピーク測定・ゲイン適用を行うWASM API。
 - `web`: 音声をアップロードせず、Web Worker内のRust/WASMで解析・書き出しする画面。
 
-ブラウザが端末内のWAVを30秒ずつ読み、Rust/WASMで解析します。画面で境界を調整後、左右共通ゲインを適用してWAVをダウンロードします。Cloudflareは静的配信のみで、Workers PaidやR2は不要です。起動とGitHub連携の設定は [web/README.md](web/README.md) を参照してください。
+ブラウザが端末内のWAVを分割して読み、Rust/WASMで解析します。画面で境界を調整後、左右共通ゲインを適用してWAVをダウンロードします。Cloudflareは静的配信のみで、Workers PaidやR2は不要です。起動とGitHub連携の設定は [web/README.md](web/README.md) を参照してください。
 
 作業は [TODO](docs/TODO.md) の順に進めます。Client WASMへの移行、トリミング位置の可視化、[RØDE M5公称特性の補正EQ](docs/m5-eq.md)まで実装済みです。実録音での拍手検出の改善とEQ試聴・書き出しの一致も[検証済み](docs/verification-real-recording.md)です。移行前のサーバー処理版には `worker-wasm-before-client` タグを付けています。
 
