@@ -9,8 +9,10 @@ test('completes the editor flow with keyboard controls and announces the downloa
   });
   await page.setViewportSize({ width: 1280, height: 960 });
   await page.goto('/');
+  const skipLink = page.getByRole('link', { name: '本文へ移動' });
+  await expect(skipLink).toBeAttached();
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('link', { name: '本文へ移動' })).toBeFocused();
+  await expect(skipLink).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('main')).toBeFocused();
   await page.keyboard.press('Tab');
