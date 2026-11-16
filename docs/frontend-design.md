@@ -18,10 +18,11 @@
 
 ## 構成と保守
 
-- `web/public/style.css`：色・角丸・余白のトークン、共通コントロール、画面レイアウト、波形周辺、レスポンシブ表示。
-- `web/public/worker-flow.css`：解析開始前の案内と処理中表示。
-- `web/public/index.html`：読み込み・範囲確認・音量調整・書き出しの見出し、入力ラベル、補足説明。
-- `web/public/app.js`：音声処理との接続、ファイル選択後と解析後のフォーカス移動、結果の通知。
+- `web/src/style.css`：色・角丸・余白のトークン、共通コントロール、画面レイアウト、波形周辺、レスポンシブ表示。
+- `web/src/worker-flow.css`：解析開始前の案内と処理中表示。
+- `web/src/App.tsx`：編集工程、解析・書き出しの進行状況、フォーム入力、フォーカス移動。
+- `web/src/TrimPanel.tsx`：範囲調整と検出候補。Canvasと再生位置の表示は再生中にフレーム単位で更新する。
+- `web/src/audio-jobs.ts`・`web/src/playback.ts`：音声処理Workerとの通信とWeb Audioによる試聴。
 
 読み込み・範囲調整・音量と補正・書き出しをタブで切り替えます。解析後は各工程を任意の順番で開けます。範囲調整では画面幅いっぱいの波形のすぐ下に、開始と終了の数値入力、付近の拡大、再生位置からの設定を並べます。再生位置は波形やキーボードで操作できるスライダーで選べます。
 
@@ -34,11 +35,11 @@
 既存のブラウザテストも併用し、WASM解析・試聴・範囲編集・EQ・書き出しの回帰を確認します。
 
 ```sh
-npm --prefix web run typecheck
-npm --prefix web run test:ci
-npm --prefix web run test:browser
+pnpm --dir web run typecheck
+pnpm --dir web run test:ci
+pnpm --dir web run test:browser
 ```
 
-Node.js 22以上が必要です。インストール済みEdgeを使う場合は`PLAYWRIGHT_CHANNEL=msedge`を指定できます。
+Node.jsとpnpmの要件は [web/README.md](../web/README.md) を参照してください。インストール済みEdgeを使う場合は`PLAYWRIGHT_CHANNEL=msedge`を指定できます。
 
 今後の確認事項：スクリーンリーダーでの実機読み上げ、OSのハイコントラスト表示、複数ブラウザでの確認。自動テストだけではこれらの利用体験を保証できません。
