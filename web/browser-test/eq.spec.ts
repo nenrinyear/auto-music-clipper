@@ -25,7 +25,9 @@ test('uses the exact corrected export for preview and preserves original timelin
   await expect(page.locator('#m5-eq')).not.toBeChecked();
   await page.locator('#start').fill('1.000019');
   await page.locator('#end').fill('4.000019');
+  await page.locator('#tab-audio').click();
   await page.locator('#m5-eq').check();
+  await page.locator('#tab-trim').click();
   await page.locator('#listen-start').click();
   await expect(page.locator('#progress')).toBeHidden();
   await expect.poll(() => page.evaluate(() => window.eqAudio.paused)).toBe(false);
@@ -42,6 +44,7 @@ test('uses the exact corrected export for preview and preserves original timelin
   }
   expect(peak).toBeCloseTo(10 ** (-1 / 20), 6);
   const downloaded = page.waitForEvent('download');
+  await page.locator('#tab-export').click();
   await page.locator('#export').click();
   const download = await downloaded;
   expect(download.suggestedFilename()).toBe('concert_clip_m5.wav');
@@ -49,15 +52,18 @@ test('uses the exact corrected export for preview and preserves original timelin
   expect(Buffer.compare(preview, exported)).toBe(0);
 
   // Reuse the processed preview and keep the full-file time coordinate system.
+  await page.locator('#tab-trim').click();
   await page.locator('#listen-start').click();
   await expect.poll(() => page.evaluate(() => window.eqAudio.src)).toBe(preparedUrl);
   const seek = page.getByRole('slider', { name: '再生位置', exact: true });
   await seek.focus(); await seek.press('End');
   await expect.poll(() => page.evaluate(() => window.eqAudio.paused)).toBe(true);
   await expect.poll(async () => Number(await seek.inputValue())).toBeCloseTo(4, 2);
+  await page.locator('#tab-audio').click();
   await page.locator('#m5-eq').uncheck();
   expect(await page.evaluate(() => window.eqAudio.src)).not.toBe(preparedUrl);
   await page.locator('#m5-eq').check();
+  await page.locator('#tab-trim').click();
   await page.locator('#start').fill('2');
   await page.locator('#listen-start').click();
   await expect(page.locator('#progress')).toBeHidden();
@@ -65,6 +71,7 @@ test('uses the exact corrected export for preview and preserves original timelin
   expect(await page.evaluate(() => window.eqAudio.src)).not.toBe(preparedUrl);
   await expect.poll(async () => Number(await seek.inputValue())).toBeGreaterThanOrEqual(2);
   await page.locator('#stop').click();
+  await page.locator('#tab-audio').click();
   await page.locator('.eq-panel summary').click();
   await expect(page.locator('#eq-curve polyline')).toHaveCount(2);
   const tick = page.locator('#eq-curve').getByText('1 kHz', { exact: true });
@@ -91,7 +98,9 @@ test('does not begin playback after stopping EQ preview preparation', async ({ p
   await page.locator('#file').setInputFiles({ name: 'recording.wav', mimeType: 'audio/wav', buffer: makeWav(8) });
   await page.locator('#begin-analysis').click();
   await expect(page.locator('#editor')).toBeVisible();
+  await page.locator('#tab-audio').click();
   await page.locator('#m5-eq').check();
+  await page.locator('#tab-trim').click();
   await page.locator('#listen-start').click();
   await expect(page.locator('#progress')).toBeVisible();
   await page.locator('#stop').click();

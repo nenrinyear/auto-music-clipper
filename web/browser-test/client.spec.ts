@@ -22,8 +22,10 @@ test('processes and downloads locally without any audio upload', async ({ page }
   await expect(page.locator('#export')).toBeEnabled();
   await page.locator('#start').fill('4');
   await page.locator('#end').fill('5');
+  await page.locator('#tab-audio').click();
   await page.locator('#normalize').uncheck();
   const downloaded = page.waitForEvent('download');
+  await page.locator('#tab-export').click();
   await page.locator('#export').click();
   const download = await downloaded;
   expect(download.suggestedFilename()).toBe('recording_clip.wav');
@@ -32,8 +34,10 @@ test('processes and downloads locally without any audio upload', async ({ page }
   expect(output.subarray(56)).toEqual(input.subarray(44 + 48_000 * 4 * 8, 44 + 48_000 * 5 * 8));
   await expect(page.locator('#export')).toBeEnabled();
   // A second export must work with the same source, using a new range.
+  await page.locator('#tab-trim').click();
   await page.locator('#end').fill('6');
   const nextDownload = page.waitForEvent('download');
+  await page.locator('#tab-export').click();
   await page.locator('#export').click();
   const next = await nextDownload;
   expect((await readFile((await next.path())!)).length).toBe(56 + 48_000 * 2 * 8);
@@ -71,11 +75,14 @@ test('loads, previews and exports 44.1 kHz 16-bit PCM', async ({ page }) => {
   await expect(page.locator('#seek')).toHaveAttribute('max', '2');
   await page.locator('#start').fill('0.5');
   await page.locator('#end').fill('1');
+  await page.locator('#tab-audio').click();
   await page.locator('#normalize').uncheck();
+  await page.locator('#tab-trim').click();
   await page.locator('#play').click();
   await expect.poll(async () => Number(await page.locator('#seek').inputValue())).toBeGreaterThan(0);
   await page.locator('#stop').click();
   const downloaded = page.waitForEvent('download');
+  await page.locator('#tab-export').click();
   await page.locator('#export').click();
   const output = await readFile((await (await downloaded).path())!);
   expect(output.readUInt32LE(24)).toBe(sampleRate);
@@ -94,6 +101,7 @@ test('falls back to a local Blob when temporary file storage is unavailable', as
   await page.getByRole('button', { name: '解析を開始' }).click();
   await expect(page.locator('#export')).toBeEnabled();
   const downloaded = page.waitForEvent('download');
+  await page.locator('#tab-export').click();
   await page.locator('#export').click();
   const download = await downloaded;
   const output = await readFile((await download.path())!);

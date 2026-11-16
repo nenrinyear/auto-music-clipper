@@ -29,10 +29,13 @@ test('shows detected and manual boundaries and exports exactly the displayed sam
     });
   });
   expect(candidateColors.every(count => count > 10)).toBe(true);
+  await page.locator('.wave-details summary').click();
   await page.locator('[data-marker="final_applause_start"]').click();
   await expect(page.locator('#zoom-level')).not.toHaveText('1.0×');
   await page.locator('#zoom-all').click();
+  await page.locator('#tab-audio').click();
   await page.locator('#normalize').uncheck();
+  await page.locator('#tab-trim').click();
   await page.locator('#start').fill('0.000019');
   await page.locator('#end').fill('6.000019');
   await page.locator('#end').blur();
@@ -41,10 +44,12 @@ test('shows detected and manual boundaries and exports exactly the displayed sam
   await expect(page.locator('#trim-state')).toContainText('288,000サンプル');
   expect(await markers.allTextContents()).toEqual(originalMarkers);
   const downloaded = page.waitForEvent('download');
+  await page.locator('#tab-export').click();
   await page.locator('#export').click();
   const output = await readFile((await (await downloaded).path())!);
   expect(output.readUInt32LE(44)).toBe(288000);
   expect(Buffer.compare(output.subarray(56), bytes.subarray(44 + 8, 44 + 288001 * 8))).toBe(0);
+  await page.locator('#tab-trim').click();
   await page.locator('#reset-trim').click();
   await expect(page.locator('#start')).toHaveValue(originalStart);
   await expect(page.locator('#end')).toHaveValue(originalEnd);

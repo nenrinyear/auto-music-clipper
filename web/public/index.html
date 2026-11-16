@@ -18,23 +18,23 @@
   <main id="main" tabindex="-1">
     <section class="intro" aria-labelledby="page-title">
       <h1 id="page-title">録音をトリミング</h1>
-      <p>録音から演奏の開始と終わりを自動で見つけます。範囲を確認し、左右のバランスを保って音量を整えて、WAVで保存できます。</p>
-      <ol class="steps" aria-label="編集の流れ">
-        <li><span>1</span>読み込み</li><li><span>2</span>範囲確認</li><li><span>3</span>音量調整</li><li><span>4</span>書き出し</li>
-      </ol>
     </section>
-    <section class="upload-section" aria-labelledby="upload-heading">
-      <div class="section-head"><h2 id="upload-heading"><span class="step-number" aria-hidden="true">1</span>録音を読み込む</h2></div>
+    <div class="stage-tabs" role="tablist" aria-label="編集工程">
+      <button id="tab-upload" type="button" role="tab" aria-selected="true" aria-controls="panel-upload">読み込み</button>
+      <button id="tab-trim" type="button" role="tab" aria-selected="false" aria-controls="panel-trim" tabindex="-1" disabled>範囲調整</button>
+      <button id="tab-audio" type="button" role="tab" aria-selected="false" aria-controls="panel-audio" tabindex="-1" disabled>音量・補正</button>
+      <button id="tab-export" type="button" role="tab" aria-selected="false" aria-controls="panel-export" tabindex="-1" disabled>書き出し</button>
+    </div>
+    <section id="panel-upload" class="upload-section" role="tabpanel" aria-labelledby="tab-upload">
+      <div class="section-head"><h2 id="upload-heading">録音を読み込む</h2></div>
+      <p>録音から演奏の開始と終わりを自動で見つけます。範囲を調整し、WAVで保存できます。</p>
       <div id="drop" class="dropzone">
         <p>ここに録音ファイルをドロップ<br />または、ボタンから選択してください。</p>
         <button id="choose-file" class="primary" type="button" aria-describedby="file-requirements">WAVファイルを選択</button>
         <input id="file" type="file" accept=".wav,audio/wav" aria-label="録音ファイル" hidden />
       </div>
       <p id="file-requirements" class="file-requirements">モノラルまたはステレオのWAV（整数PCM・浮動小数点）に対応。長さは120分まで。録音はアップロードされません。</p>
-    </section>
-    <div id="error" class="error" role="alert" aria-atomic="true" hidden></div>
-    <section id="workspace" aria-label="録音の編集" hidden>
-      <div class="file-row">
+      <div id="file-row" class="file-row" hidden>
         <div class="file-icon" aria-hidden="true">WAV</div>
         <div class="file-meta"><strong id="filename"></strong><span id="fileinfo"></span></div>
         <button id="replace" class="text-button" type="button">ファイルを変更</button>
@@ -43,39 +43,55 @@
         <div><strong>録音をこの端末内で解析</strong><span>音声は送信されません。書き出し時に端末内の一時保存領域を使う場合があります。</span></div>
         <button id="begin-analysis" class="primary" type="button">解析を開始 <span aria-hidden="true">→</span></button>
       </div>
+    </section>
+    <div id="error" class="error" role="alert" aria-atomic="true" hidden></div>
+    <section id="workspace" aria-label="録音の編集" hidden>
       <div id="progress" class="progress" role="status" aria-live="polite" aria-atomic="true" hidden><span class="spinner" aria-hidden="true"></span><span id="progress-text">解析を準備しています…</span></div>
       <div id="editor" hidden>
-        <section class="trim-section" aria-labelledby="trim-heading">
+        <section id="panel-trim" class="trim-section" role="tabpanel" aria-labelledby="tab-trim" hidden>
           <div>
-            <div class="section-head"><h2 id="trim-heading" tabindex="-1"><span class="step-number" aria-hidden="true">2</span>クリップ範囲を確認する</h2><span id="status" class="status"></span></div>
+            <div class="section-head"><h2 id="trim-heading" tabindex="-1">クリップ範囲を確認する</h2><span id="status" class="status"></span></div>
             <p>自動検出は目安です。開始と終了を試聴し、残したい範囲に調整してください。</p>
             <div class="wave-tools" role="group" aria-label="波形の拡大表示">
               <button id="zoom-in" class="secondary" aria-label="波形を拡大">＋</button><button id="zoom-out" class="secondary" aria-label="波形を縮小">−</button><output id="zoom-level" aria-label="波形の拡大率">1.0×</output>
-              <button id="zoom-all" class="secondary">全体</button><button id="zoom-selection" class="secondary">選択範囲</button><button id="zoom-start" class="secondary">開始付近</button><button id="zoom-end" class="secondary">終了付近</button>
+              <button id="zoom-all" class="secondary">全体</button><button id="zoom-selection" class="secondary">選択範囲</button>
             </div>
           </div>
           <div class="wave-visual">
             <div class="wave-labels"><span id="wave-start-label">0:00</span><span id="duration-label"></span></div>
             <canvas id="wave" width="1200" height="240" role="img" aria-label="録音の波形と保存範囲" aria-describedby="wave-instructions">開始・終了は下の数値入力、再生位置はスライダーで変更できます。</canvas>
-            <div>
-              <div class="wave-legend" aria-label="波形の凡例"><span class="legend-keep">明るい区間：保存</span><span class="legend-cut">暗い区間：カット</span><span class="legend-detected">点線：検出候補・自動境界</span><span class="legend-selected">緑の実線：保存境界</span></div>
-              <div id="detection-markers" class="detection-markers" role="group" aria-label="自動検出の候補"></div>
-            </div>
           </div>
           <div>
+            <div class="range-inputs">
+              <div class="boundary-controls">
+                <label>開始（秒）<input id="start" type="number" min="0" step="0.01" /></label>
+                <button id="zoom-start" class="secondary" type="button">開始付近</button>
+                <button id="set-start" class="secondary" type="button">再生位置を開始に</button>
+              </div>
+              <div class="boundary-controls">
+                <label>終了（秒）<input id="end" type="number" min="0" step="0.01" /></label>
+                <button id="zoom-end" class="secondary" type="button">終了付近</button>
+                <button id="set-end" class="secondary" type="button">再生位置を終了に</button>
+              </div>
+              <span id="selection-length"></span>
+            </div>
             <label class="wave-pan-label">表示位置<input id="wave-pan" type="range" min="0" max="0" value="0" step="0.01" aria-label="波形の表示位置" disabled /></label>
             <p id="wave-detail" class="wave-help" role="status"></p>
-            <p id="break-info" class="wave-help"></p>
             <div class="playback"><button id="play" class="secondary" aria-pressed="false">▶ 再生</button><button id="stop" class="secondary" disabled>■ 停止</button><output id="playback-time" for="seek" aria-live="off">0:00 / 0:00</output></div>
             <input id="seek" class="seek" type="range" min="0" max="0" step="0.01" value="0" aria-label="再生位置" />
-            <p id="wave-instructions" class="wave-help">波形のクリックで再生位置を移動、緑の線のドラッグで範囲を調整できます。キーボードでは再生位置スライダーと、下の開始・終了の数値入力を使ってください。停止ボタンは再生中に使えます。</p>
-            <div class="range-inputs"><label>開始（秒）<input id="start" type="number" min="0" step="0.01" /></label><label>終了（秒）<input id="end" type="number" min="0" step="0.01" /></label><span id="selection-length"></span></div>
+            <p id="wave-instructions" class="wave-help">波形を押すと再生位置が移動します。その位置を開始・終了に設定するか、緑の線をドラッグして範囲を調整できます。キーボードでは再生位置スライダーと開始・終了の数値入力を使えます。</p>
             <div class="trim-summary"><p id="trim-state" class="wave-help" role="status"></p><button id="reset-trim" class="secondary" aria-describedby="reset-help" disabled>自動検出の範囲に戻す</button><p id="reset-help" class="wave-help">範囲を手動で変更すると、自動検出の範囲に戻せます。</p></div>
             <div class="controls"><button id="listen-start" class="secondary" aria-pressed="false">▶ 冒頭を試聴</button><button id="listen-end" class="secondary" aria-pressed="false">▶ 終わりを試聴</button></div>
+            <details class="wave-details">
+              <summary>波形の凡例と検出候補</summary>
+              <div class="wave-legend" aria-label="波形の凡例"><span class="legend-keep">明るい区間：保存</span><span class="legend-cut">暗い区間：カット</span><span class="legend-detected">点線：検出候補・自動境界</span><span class="legend-selected">緑の実線：保存境界</span></div>
+              <div id="detection-markers" class="detection-markers" role="group" aria-label="自動検出の候補"></div>
+              <p id="break-info" class="wave-help"></p>
+            </details>
           </div>
         </section>
-        <section class="editor-section" aria-labelledby="audio-heading">
-          <div class="section-head"><h2 id="audio-heading"><span class="step-number" aria-hidden="true">3</span>音量・補正を設定する</h2></div>
+        <section id="panel-audio" class="editor-section" role="tabpanel" aria-labelledby="tab-audio" hidden>
+          <div class="section-head"><h2 id="audio-heading">音量・補正を設定する</h2></div>
           <label class="gain-control"><input id="normalize" type="checkbox" checked aria-describedby="normalize-help" />ピークを揃える（ノーマライズ）</label>
           <div class="gain-row"><span id="normalize-help">選択範囲で左右のうち大きいピークが指定値に達するよう、両チャンネルに同じゲインを適用します。</span><label class="gain-label">目標ピーク<select id="target"><option value="-1">−1 dBFS</option><option value="-0.5">−0.5 dBFS</option><option value="0">0 dBFS</option></select></label></div>
           <div class="eq-panel">
@@ -84,14 +100,14 @@
             <details><summary>公称周波数特性と補正EQ</summary>
               <svg id="eq-curve" viewBox="0 0 520 150" role="img" aria-label="M5の公称周波数特性と補正EQ。横軸は20 Hzから20 kHzの対数目盛、縦軸は−4 dBから＋4 dB。"></svg>
               <div class="eq-legend"><span class="eq-response">M5公称特性（1 kHz基準）</span><span class="eq-correction">適用する補正EQ</span></div>
-              <p>公称特性から逆向きの補正を設計し、低域と高域の端では補正を弱めています。</p>
+              <p>公称特性の落ち込みをそのまま持ち上げると、低域の振動や高域のノイズまで増幅することがあります。そのため、20〜80 Hzと16〜20 kHzでは帯域の端に向かって補正を弱めています。</p>
               <a href="https://edge.rode.com/pdf/products/48/M5_Matched_pair_DS_V02.pdf" target="_blank" rel="noopener">RØDE公式 M5データシート（V02・2ページ、新しいタブで開きます）</a>
             </details>
           </div>
           <p id="normalization-info" class="wave-help" role="status">選択範囲のピークで再計算します（試聴・書き出し時）</p>
         </section>
-        <section class="editor-section" aria-labelledby="export-heading">
-          <div class="section-head"><h2 id="export-heading"><span class="step-number" aria-hidden="true">4</span>WAVを書き出す</h2></div>
+        <section id="panel-export" class="editor-section" role="tabpanel" aria-labelledby="tab-export" hidden>
+          <div class="section-head"><h2 id="export-heading">WAVを書き出す</h2></div>
           <div class="export-row"><div><span class="export-title">仕上がり</span><span id="export-info">境界を確認してください</span></div><button id="export" class="primary" disabled>WAVを書き出す <span aria-hidden="true">↓</span></button></div>
           <p id="export-status" class="wave-help" role="status" aria-atomic="true"></p>
         </section>

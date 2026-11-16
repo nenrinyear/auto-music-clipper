@@ -10,10 +10,43 @@ let playbackRequest = 0, activePreview, animationFrame, dragMode;
 let previewContext, previewSource, previewGain, measuredPreview;
 let preparedPreview, playbackOffset = 0, processedFrames;
 const waveView = new WaveformView(updateWaveView);
+const tabs = [...document.querySelectorAll('.stage-tabs [role=tab]')];
+
+function showStage(stage) {
+  for (const tab of tabs) {
+    const selected = tab.id === `tab-${stage}`;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    $(tab.getAttribute('aria-controls')).hidden = !selected;
+  }
+}
+
+for (const tab of tabs) {
+  tab.addEventListener('click', () => {
+    if (tab.getAttribute('aria-selected') === 'true') return;
+    stopPlayback();
+    showStage(tab.id.slice(4));
+  });
+  tab.addEventListener('keydown', event => {
+    const available = tabs.filter(item => !item.disabled);
+    const index = available.indexOf(tab);
+    const next = {
+      ArrowLeft: (index + available.length - 1) % available.length,
+      ArrowRight: (index + 1) % available.length,
+      Home: 0,
+      End: available.length - 1,
+    }[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    available[next].focus();
+    available[next].click();
+  });
+}
 
 function setBusy(value) {
   busy = value;
   for (const id of ['file', 'choose-file', 'replace', 'begin-analysis', 'start', 'end', 'normalize', 'target', 'm5-eq', 'listen-start', 'listen-end', 'play', 'seek']) $(id).disabled = value;
+  for (const id of ['set-start', 'set-end']) $(id).disabled = value;
   $('export').disabled = value || !analysis;
   $('play').disabled = value || !!activePreview;
 }
@@ -93,6 +126,11 @@ $('zoom-selection').addEventListener('click', () => {
 });
 for (const boundary of ['start', 'end']) {
   $(`zoom-${boundary}`).addEventListener('click', () => waveView.set(Number($(boundary).value) - 2.5, 5));
+  $(`set-${boundary}`).addEventListener('click', () => {
+    const frame = Math.max(0, Math.min(wav.frames, Math.round(playbackTime() * wav.sampleRate)));
+    $(boundary).value = frameSeconds(frame, wav.sampleRate);
+    updateRange();
+  });
 }
 $('wave-pan').addEventListener('input', () => waveView.set(Number($('wave-pan').value), waveView.span));
 new ResizeObserver(drawWave).observe($('wave'));
@@ -110,6 +148,9 @@ async function loadFile(file) {
   objectUrl = undefined; sourceFile = undefined; wav = undefined; analysis = undefined; envelope = [];
   waveView.reset();
   workspace.hidden = true; $('empty-note').hidden = false;
+  $('file-row').hidden = true;
+  for (const tab of tabs.slice(1)) tab.disabled = true;
+  showStage('upload');
   $('editor').hidden = true; $('progress').hidden = true; $('preflight').hidden = true;
   try {
     if (!file.name.toLowerCase().endsWith('.wav')) throw Error('WAVファイルを選択してください。');
@@ -121,7 +162,7 @@ async function loadFile(file) {
     $('duration-label').textContent = clock(seconds);
     objectUrl = URL.createObjectURL(file);
     setupPlayer();
-    workspace.hidden = false; $('empty-note').hidden = true; $('preflight').hidden = false;
+    workspace.hidden = false; $('file-row').hidden = false; $('empty-note').hidden = true; $('preflight').hidden = false;
   } catch (error) { showError(error.message || String(error)); }
   finally { setBusy(false); if (sourceFile) $('begin-analysis').focus(); }
 }
@@ -141,6 +182,8 @@ async function startAnalysis() {
     showDetectionMarkers();
     $('status').textContent = analysis.status === 'ready' ? '自動検出 · 確認してください' : '要確認 · 手動調整してください';
     $('editor').hidden = false;
+    for (const tab of tabs.slice(1)) tab.disabled = false;
+    showStage('trim');
   } catch (error) { $('preflight').hidden = false; showError(error.message || String(error)); }
   finally {
     $('progress').hidden = true; setBusy(false);

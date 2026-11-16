@@ -65,6 +65,7 @@ test('previews and exports with the same stereo gain, including changed settings
   expect(normalized.right / normalized.left).toBeCloseTo(.5, 3);
   expect(normalized.measurements).toBe(1);
   const downloadPromise = page.waitForEvent('download');
+  await page.locator('#tab-export').click();
   await page.locator('#export').click();
   const output = await readFile((await (await downloadPromise).path())!);
   let exportPeak = 0;
@@ -72,17 +73,22 @@ test('previews and exports with the same stereo gain, including changed settings
   expect(normalized.left).toBeCloseTo(exportPeak, 3);
 
   // Same selection/settings reuse the measured gain; seeking does not change it.
+  await page.locator('#tab-trim').click();
   await page.locator('#listen-start').click();
   await expect.poll(async () => (await levels()).left).toBeGreaterThan(.88);
   expect((await levels()).measurements).toBe(1);
+  await page.locator('#tab-audio').click();
   await page.locator('#normalize').uncheck();
   await expect.poll(() => page.evaluate(() => window.previewProbe.audio.paused)).toBe(true);
+  await page.locator('#tab-trim').click();
   await page.locator('#listen-start').click();
   await expect.poll(async () => (await levels()).gain).toBe(1);
   await expect.poll(async () => (await levels()).left).toBeCloseTo(.25, 3);
 
+  await page.locator('#tab-audio').click();
   await page.locator('#normalize').check();
   await page.locator('#target').selectOption('-0.5');
+  await page.locator('#tab-trim').click();
   await page.locator('#listen-start').click();
   await expect.poll(async () => (await levels()).gain).toBeCloseTo(10 ** (-.5 / 20) / .25, 6);
   await page.locator('#stop').click();
@@ -101,6 +107,7 @@ test('previews and exports with the same stereo gain, including changed settings
   expect((await levels()).measurements).toBe(4);
   await expect(page.locator('#normalization-info')).toContainText('再計算済み');
   const trimmedDownload = page.waitForEvent('download');
+  await page.locator('#tab-export').click();
   await page.locator('#export').click();
   const trimmed = await readFile((await (await trimmedDownload).path())!);
   let trimmedPeak = 0;
