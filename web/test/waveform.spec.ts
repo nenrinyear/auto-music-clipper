@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { parseWav, readWaveform } from '../public/audio-processing.js';
-import { WaveformView } from '../public/waveform-view.js';
+import { parseWav, readWaveform } from '../src/audio-processing.js';
+import { WaveformView } from '../src/waveform-view.js';
 import { makeWav, RATE } from './fixtures';
 
 afterEach(() => vi.unstubAllGlobals());

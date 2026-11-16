@@ -1,5 +1,6 @@
 import { RATE } from './audio-processing.js';
 
+/** @type {{key: 'music_start' | 'tail_end' | 'final_applause_start', label: string, color: string}[]} */
 export const detectionMarkers = [
   { key: 'music_start', label: '演奏開始候補', color: '#80c9ec' },
   { key: 'tail_end', label: '余韻終了候補', color: '#c5a2ee' },

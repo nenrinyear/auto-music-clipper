@@ -92,7 +92,7 @@ test('loads, previews and exports 44.1 kHz 16-bit PCM', async ({ page }) => {
 });
 
 test('falls back to a local Blob when temporary file storage is unavailable', async ({ page }) => {
-  await page.route('**/audio-worker.js', async route => {
+  await page.route('**/audio-worker-*.js', async route => {
     const response = await route.fetch();
     await route.fulfill({ response, body: `Object.defineProperty(navigator, 'storage', { value: undefined });\n${await response.text()}` });
   });

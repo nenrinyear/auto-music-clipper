@@ -129,7 +129,7 @@ test('stopping during peak measurement does not start playback later', async ({ 
       constructor(src?: string) { super(src); window.previewProbe.audio = this; }
     };
   });
-  await page.route('**/audio-worker.js', async route => {
+  await page.route('**/audio-worker-*.js', async route => {
     const response = await route.fetch();
     await route.fulfill({ response, body: `${await response.text()}\nconst handler = self.onmessage; self.onmessage = event => { if (event.data.type === 'measure') setTimeout(() => handler(event), 500); else handler(event); };` });
   });

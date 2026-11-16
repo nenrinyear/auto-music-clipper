@@ -90,7 +90,7 @@ test('does not begin playback after stopping EQ preview preparation', async ({ p
       constructor(src?: string) { super(src); window.eqAudio = this; }
     };
   });
-  await page.route('**/audio-worker.js', async route => {
+  await page.route('**/audio-worker-*.js', async route => {
     const response = await route.fetch();
     await route.fulfill({ response, body: `${await response.text()}\nconst handler = self.onmessage; self.onmessage = event => { if (event.data.type === 'preview') setTimeout(() => handler(event), 500); else handler(event); };` });
   });

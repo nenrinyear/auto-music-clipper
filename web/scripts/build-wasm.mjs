@@ -24,7 +24,7 @@ function run(command, args) {
 // Bootstrap into the checkout, without modifying the build machine's PATH/profile.
 if (probe("rustup", ["--version"]).status !== 0) {
   if (process.platform !== "linux") {
-    throw new Error("Install rustup from https://rustup.rs, then rerun npm run build:wasm.");
+    throw new Error("Install rustup from https://rustup.rs, then rerun pnpm run build:wasm.");
   }
   env.CARGO_HOME = path.join(tools, "cargo");
   env.RUSTUP_HOME = path.join(tools, "rustup");
@@ -50,4 +50,4 @@ if (probe(cli, ["--version"]).stdout?.trim() !== `wasm-bindgen ${version}`) {
 }
 run("cargo", ["build", "--locked", "--release", "-p", "audio-wasm", "--target", "wasm32-unknown-unknown"]);
 const target = path.resolve(root, env.CARGO_TARGET_DIR || "target");
-run(cli, ["--target", "web", "--out-dir", path.join(root, "web/public/wasm"), "--out-name", "audio_wasm", path.join(target, "wasm32-unknown-unknown/release/audio_wasm.wasm")]);
+run(cli, ["--target", "web", "--out-dir", path.join(root, "web/src/wasm"), "--out-name", "audio_wasm", path.join(target, "wasm32-unknown-unknown/release/audio_wasm.wasm")]);

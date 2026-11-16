@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import * as wasm from '../public/wasm/audio_wasm.js';
-import { parseWav, analyzeAudio, renderAudio } from '../public/audio-processing.js';
-import { selectionFrames, frameSeconds } from '../public/trim-view.js';
+import * as wasm from '../src/wasm/audio_wasm.js';
+import { parseWav, analyzeAudio, renderAudio } from '../src/audio-processing.js';
+import { selectionFrames, frameSeconds } from '../src/trim-view.js';
 import { makeConcertWav, RATE } from './fixtures';
 
-wasm.initSync({ module: readFileSync(new URL('../public/wasm/audio_wasm_bg.wasm', import.meta.url)) });
+wasm.initSync({ module: readFileSync(new URL('../src/wasm/audio_wasm_bg.wasm', import.meta.url)) });
 
 describe('sample-aligned trimming', () => {
   it('round-trips frame positions including one-sample boundaries and long recordings', () => {
