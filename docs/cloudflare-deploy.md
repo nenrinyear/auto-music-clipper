@@ -11,7 +11,7 @@
 1. Cloudflareダッシュボードの **Workers & Pages** からWorkerの作成を開き、GitHubリポジトリをインポートする。PagesではなくWorkersを選ぶ。
 2. GitHub連携を認可し、`nenrinyear/auto-music-clipper` を選択する。リポジトリが表示されない場合は、GitHub側の **Cloudflare Workers and Pages** アプリのリポジトリアクセスへ追加する。
 3. 本番ブランチを `main` にする。
-4. Worker名を `web` にする。現在の `web/wrangler.jsonc` の `name` と一致させる。別名を使う場合は同ファイルの `name` も変更してコミットする。
+4. Worker名を `auto-music-clipper` にする。現在の `web/wrangler.jsonc` の `name` と一致させる。別名を使う場合は同ファイルの `name` も変更してコミットする。
 
 既存のWorkerに接続する場合は、そのWorkerの **Settings > Build** でGitリポジトリと次のビルド設定を確認する。画面上の表記は更新によって異なる場合がある。
 
