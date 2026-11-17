@@ -1,21 +1,21 @@
 # 余韻 Web / Client WASM
 
-音声の解析・切り出し・ノーマライズを、ブラウザのWeb Worker内のRust/WASMで実行します。M5補正EQは同じWorker内のJavaScriptで処理します。録音はアップロードしません。CloudflareはHTML・JavaScript・WASMの静的配信だけに使い、Workers Paid、R2、Rustバックエンド、Tunnelは不要です。
+画面はReact + TypeScriptで実装し、Viteで静的アセットを生成します。音声の解析・切り出し・ノーマライズを、ブラウザのWeb Worker内のRust/WASMで実行します。M5補正EQは同じWorker内のJavaScriptで処理します。録音はアップロードしません。CloudflareはHTML・JavaScript・WASMの静的配信だけに使い、Workers Paid、R2、Rustバックエンド、Tunnelは不要です。
 
-波形表示、検出候補と保存境界の可視化、開始・終了の調整、ノーマライズを反映した試聴に対応しています。「RØDE M5で録音した音声を補正する」を有効にすると、[公式公称特性に基づくM5補正EQ](../docs/m5-eq.md)を試聴と書き出しに反映します。初期状態はオフです。
+波形表示、検出候補と保存境界の可視化、開始・終了の調整、ノーマライズを反映した試聴に対応しています。目標ピークの初期値は −0.5 dBFS です。初期状態では[公式公称特性に基づくM5補正EQ](../docs/m5-eq.md)を試聴と書き出しに適用します。「RØDE M5で録音した音声を補正する」で切り替えられます。
 
 ## ビルドと起動
 
-Node.js 22以降と [rustup](https://rustup.rs/) を使用します。RustとWASMターゲットは `rust-toolchain.toml` で固定し、`wasm-bindgen-cli` は `Cargo.lock` と同じバージョンをビルドスクリプトが `.build-tools/` へ導入します。
+Node.js 22.12以降（22系または24以降）、`package.json` に記載のpnpm、および [rustup](https://rustup.rs/) を使用します。RustとWASMターゲットは `rust-toolchain.toml` で固定し、`wasm-bindgen-cli` は `Cargo.lock` と同じバージョンをビルドスクリプトが `.build-tools/` へ導入します。
 
 ```sh
-npm --prefix web ci
-npm --prefix web run dev
+pnpm --dir web install --frozen-lockfile
+pnpm --dir web run dev
 ```
 
-`predev` でブラウザ用のWASMを生成します。`http://localhost:8787` を開いてください。HTTPSまたはlocalhostで使用します。`file://` ではES ModulesやWeb Workerを読み込めません。Windowsでもshの導入は不要です。
+`dev` はブラウザ用のWASMを生成してからViteを起動します。`http://localhost:8787` を開いてください。HTTPSまたはlocalhostで使用します。`file://` ではES ModulesやWeb Workerを読み込めません。Windowsでもshの導入は不要です。
 
-単独で生成する場合は `npm --prefix web run build:wasm` を実行します。出力先は `web/public/wasm/` で、`wasm-bindgen --target web` のローダーをWeb Workerから初期化します。
+単独で生成する場合は `pnpm --dir web run build:wasm` を実行します。出力先は `web/src/wasm/` で、`wasm-bindgen --target web` のローダーをWeb Workerから初期化します。
 
 ## ファイルと保存
 
@@ -51,14 +51,14 @@ M5補正無効時の試聴は元ファイルをブラウザの音声プレイヤ
 | 設定 | 値 |
 | --- | --- |
 | Root directory | `web` |
-| Build command | `npm run build:wasm` |
-| Deploy command | `npx wrangler deploy` |
+| Build command | `pnpm run build` |
+| Deploy command | `pnpm exec wrangler deploy` |
 | Build variable | `NODE_VERSION=22` |
 | Build watch paths | 初回は全体を対象にする。絞る場合も `web/**`, `crates/**`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml` を含める |
 
 依存パッケージの自動インストールは有効にします。Rustの共有クレートを参照するため、リポジトリ全体をチェックアウトする必要があります。Linuxにrustupがなければビルドスクリプトがチェックアウト内へ導入します。
 
-ローカルの `npm run deploy` も `predeploy` でWASMを生成します。Git連携では二重ビルドを避けるため上表のDeploy commandを使用します。Wrangler設定にはサーバーのエントリーポイントやR2バインディング、cron、Paid専用のCPU設定はありません。
+ローカルの `pnpm run deploy` はWASMとViteの配布物を生成し、`dist/` を配信します。Git連携では二重ビルドを避けるため上表のDeploy commandを使用します。Wrangler設定にはサーバーのエントリーポイントやR2バインディング、cron、Paid専用のCPU設定はありません。
 
 公式資料: [静的アセットの配信](https://developers.cloudflare.com/workers/static-assets/get-started/)、[静的配信の料金と制限](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/)。
 
@@ -66,15 +66,15 @@ M5補正無効時の試聴は元ファイルをブラウザの音声プレイヤ
 
 ```sh
 cargo test --workspace --locked
-npm --prefix web run build:wasm
-npm --prefix web run typecheck
-npm --prefix web run test:ci
-npm --prefix web exec -- playwright install chromium
-npm --prefix web run test:browser
-npm --prefix web run benchmark:wasm
-npm --prefix web run check:deploy
+pnpm --dir web run build:wasm
+pnpm --dir web run typecheck
+pnpm --dir web run test:ci
+pnpm --dir web exec playwright install chromium
+pnpm --dir web run test:browser
+pnpm --dir web run benchmark:wasm
+pnpm --dir web run check:deploy
 ```
 
-ブラウザテストはWranglerをローカル起動し、実際のWeb WorkerとWASMで解析・ダウンロードします。インストール済みEdgeを使う場合は環境変数 `PLAYWRIGHT_CHANNEL=msedge` を設定できます。GitHub Actionsでもテスト・バンドル検証を実行し、デプロイは行いません。
+ブラウザテストはViteで生成した `dist/` をWranglerで配信し、実際のWeb WorkerとWASMで解析・ダウンロードします。インストール済みEdgeを使う場合は環境変数 `PLAYWRIGHT_CHANNEL=msedge` を設定できます。GitHub Actionsでもテスト・バンドル検証を実行し、デプロイは行いません。
 
 `benchmark:wasm` はNode上で同じブラウザ用WASMを測定します。時間・メモリは端末によって異なり、実録音の判定精度やモバイル端末での最大ファイル長を保証するものではありません。

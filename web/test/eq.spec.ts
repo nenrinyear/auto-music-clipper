@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import * as wasm from '../public/wasm/audio_wasm.js';
-import { M5Equalizer, M5_PROFILE } from '../public/m5-eq.js';
-import { parseWav, measureNormalization, renderAudio } from '../public/audio-processing.js';
+import * as wasm from '../src/wasm/audio_wasm.js';
+import { M5Equalizer, M5_PROFILE } from '../src/m5-eq.js';
+import { parseWav, measureNormalization, renderAudio } from '../src/audio-processing.js';
 import { makeWav, RATE } from './fixtures';
 
-wasm.initSync({ module: readFileSync(new URL('../public/wasm/audio_wasm_bg.wasm', import.meta.url)) });
+wasm.initSync({ module: readFileSync(new URL('../src/wasm/audio_wasm_bg.wasm', import.meta.url)) });
 
 describe('nominal M5 correction', () => {
   it('keeps filter state across chunks and applies identical coefficients without channel mixing', () => {

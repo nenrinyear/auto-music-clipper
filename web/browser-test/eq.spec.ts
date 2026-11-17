@@ -22,11 +22,11 @@ test('uses the exact corrected export for preview and preserves original timelin
   await page.locator('#file').setInputFiles({ name: 'concert.wav', mimeType: 'audio/wav', buffer: input });
   await page.locator('#begin-analysis').click();
   await expect(page.locator('#editor')).toBeVisible();
-  await expect(page.locator('#m5-eq')).not.toBeChecked();
   await page.locator('#start').fill('1.000019');
   await page.locator('#end').fill('4.000019');
   await page.locator('#tab-audio').click();
-  await page.locator('#m5-eq').check();
+  await expect(page.locator('#m5-eq')).toBeChecked();
+  await expect(page.locator('#target')).toHaveValue('-0.5');
   await page.locator('#tab-trim').click();
   await page.locator('#listen-start').click();
   await expect(page.locator('#progress')).toBeHidden();
@@ -42,7 +42,7 @@ test('uses the exact corrected export for preview and preserves original timelin
     peak = Math.max(peak, Math.abs(left), Math.abs(right));
     if (offset % 997 === 0 && Math.abs(left) > .01) expect(right / left).toBeCloseTo(.5, 5);
   }
-  expect(peak).toBeCloseTo(10 ** (-1 / 20), 6);
+  expect(peak).toBeCloseTo(10 ** (-0.5 / 20), 6);
   const downloaded = page.waitForEvent('download');
   await page.locator('#tab-export').click();
   await page.locator('#export').click();
@@ -90,7 +90,7 @@ test('does not begin playback after stopping EQ preview preparation', async ({ p
       constructor(src?: string) { super(src); window.eqAudio = this; }
     };
   });
-  await page.route('**/audio-worker.js', async route => {
+  await page.route('**/audio-worker-*.js', async route => {
     const response = await route.fetch();
     await route.fulfill({ response, body: `${await response.text()}\nconst handler = self.onmessage; self.onmessage = event => { if (event.data.type === 'preview') setTimeout(() => handler(event), 500); else handler(event); };` });
   });

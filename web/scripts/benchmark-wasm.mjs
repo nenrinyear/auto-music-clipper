@@ -1,9 +1,9 @@
 // Node-hosted WASM measurements: useful for sizing, not production Worker CPU/RSS.
 import { readFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
-import * as bindings from "../public/wasm/audio_wasm.js";
+import * as bindings from "../src/wasm/audio_wasm.js";
 
-const exports = bindings.initSync({ module: readFileSync(new URL("../public/wasm/audio_wasm_bg.wasm", import.meta.url)) });
+const exports = bindings.initSync({ module: readFileSync(new URL("../src/wasm/audio_wasm_bg.wasm", import.meta.url)) });
 
 function measure(name, run) {
   const started = performance.now();

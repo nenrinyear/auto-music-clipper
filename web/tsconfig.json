@@ -8,8 +8,9 @@
     "checkJs": false,
     "noEmit": true,
     "strict": true,
+    "jsx": "react-jsx",
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["test/**/*.ts", "browser-test/**/*.ts", "*.mts", "public/audio-processing.js"]
+  "include": ["test/**/*.ts", "browser-test/**/*.ts", "*.mts", "src/**/*.ts", "src/**/*.tsx"]
 }

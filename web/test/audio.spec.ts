@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, it, expect, vi } from 'vitest';
-import * as wasm from '../public/wasm/audio_wasm.js';
-import { parseWav, analyzeAudio, readWaveform, renderAudio, measureNormalization, BLOB_LIMIT } from '../public/audio-processing.js';
+import * as wasm from '../src/wasm/audio_wasm.js';
+import { parseWav, analyzeAudio, readWaveform, renderAudio, measureNormalization, BLOB_LIMIT } from '../src/audio-processing.js';
 import { makeWav, RATE } from './fixtures';
 
-wasm.initSync({ module: readFileSync(new URL('../public/wasm/audio_wasm_bg.wasm', import.meta.url)) });
+wasm.initSync({ module: readFileSync(new URL('../src/wasm/audio_wasm_bg.wasm', import.meta.url)) });
 const fileOf = (bytes: Buffer) => new File([new Uint8Array(bytes)], 'recording.wav', { type: 'audio/wav' });
 
 describe('client WASM audio processing', () => {
