@@ -15,6 +15,9 @@ test('stops previews and synchronizes waveform, seeking and playback time', asyn
   await page.locator('#file').setInputFiles({ name: 'recording.wav', mimeType: 'audio/wav', buffer: makeWav() });
   await page.locator('#begin-analysis').click();
   await expect(page.locator('#editor')).toBeVisible();
+  await page.locator('#tab-audio').click();
+  await page.locator('#m5-eq').uncheck();
+  await page.locator('#tab-trim').click();
   const currentTime = () => page.evaluate(() => (window as Window & { previewAudio?: HTMLAudioElement }).previewAudio!.currentTime);
   const paused = () => page.evaluate(() => (window as Window & { previewAudio?: HTMLAudioElement }).previewAudio!.paused);
   const seek = page.getByRole('slider', { name: '再生位置' });

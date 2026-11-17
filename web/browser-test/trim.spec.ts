@@ -35,6 +35,7 @@ test('shows detected and manual boundaries and exports exactly the displayed sam
   await page.locator('#zoom-all').click();
   await page.locator('#tab-audio').click();
   await page.locator('#normalize').uncheck();
+  await page.locator('#m5-eq').uncheck();
   await page.locator('#tab-trim').click();
   await page.locator('#start').fill('0.000019');
   await page.locator('#end').fill('6.000019');

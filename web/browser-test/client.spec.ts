@@ -24,6 +24,7 @@ test('processes and downloads locally without any audio upload', async ({ page }
   await page.locator('#end').fill('5');
   await page.locator('#tab-audio').click();
   await page.locator('#normalize').uncheck();
+  await page.locator('#m5-eq').uncheck();
   const downloaded = page.waitForEvent('download');
   await page.locator('#tab-export').click();
   await page.locator('#export').click();
@@ -77,6 +78,7 @@ test('loads, previews and exports 44.1 kHz 16-bit PCM', async ({ page }) => {
   await page.locator('#end').fill('1');
   await page.locator('#tab-audio').click();
   await page.locator('#normalize').uncheck();
+  await page.locator('#m5-eq').uncheck();
   await page.locator('#tab-trim').click();
   await page.locator('#play').click();
   await expect.poll(async () => Number(await page.locator('#seek').inputValue())).toBeGreaterThan(0);

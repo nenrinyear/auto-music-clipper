@@ -54,6 +54,10 @@ test('previews and exports with the same stereo gain, including changed settings
   await page.locator('#file').setInputFiles({ name: 'recording.wav', mimeType: 'audio/wav', buffer: input });
   await page.locator('#begin-analysis').click();
   await expect(page.locator('#editor')).toBeVisible();
+  await page.locator('#tab-audio').click();
+  await page.locator('#m5-eq').uncheck();
+  await page.locator('#target').selectOption('-1');
+  await page.locator('#tab-trim').click();
   await page.locator('#start').fill('4');
   await page.locator('#end').fill('6');
   await page.locator('#listen-start').click();
@@ -137,6 +141,9 @@ test('stopping during peak measurement does not start playback later', async ({ 
   await page.locator('#file').setInputFiles({ name: 'recording.wav', mimeType: 'audio/wav', buffer: makeWav() });
   await page.locator('#begin-analysis').click();
   await expect(page.locator('#editor')).toBeVisible();
+  await page.locator('#tab-audio').click();
+  await page.locator('#m5-eq').uncheck();
+  await page.locator('#tab-trim').click();
   await page.locator('#listen-start').click();
   await expect(page.locator('#progress')).toBeVisible();
   await page.locator('#stop').click();

@@ -36,6 +36,8 @@ test('completes the editor flow with keyboard controls and announces the downloa
   await normalize.focus();
   await page.keyboard.press('Space');
   await expect(normalize).not.toBeChecked();
+  await page.locator('#m5-eq').focus();
+  await page.keyboard.press('Space');
   const downloadEvent = page.waitForEvent('download');
   await page.locator('#tab-audio').focus();
   await page.keyboard.press('End');

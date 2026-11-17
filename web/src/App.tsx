@@ -46,8 +46,8 @@ export function App() {
   const [dragging, setDragging] = useState(false);
   const [bounds, setBounds] = useState({ start: '', end: '' });
   const [normalize, setNormalize] = useState(true);
-  const [target, setTarget] = useState('-1');
-  const [eq, setEq] = useState(false);
+  const [target, setTarget] = useState('-0.5');
+  const [eq, setEq] = useState(true);
   const [measurement, setMeasurement] = useState<{ key: string; gain: number }>();
   const [active, setActive] = useState<PreviewButton>();
   const [exportStatus, setExportStatus] = useState('');
